@@ -27,10 +27,7 @@ Return a JSON object with these fields:
 - tags (array of relevant tags like ["software", "hosting"])
 - vendor_name (company name)
 - invoice_number (if present)
-- payment_status (if mentioned: "paid", "unpaid", or "pending")
 - expense_date (YYYY-MM-DD format if mentioned)
-
-{subject_line}
 
 Content:
 {content}
@@ -38,13 +35,12 @@ Content:
 Return ONLY valid JSON, no other text."""
 
 
-def parse_text_with_claude(text: str, subject: str = None) -> dict:
+def parse_text_with_claude(text: str) -> dict:
     """
     Parse text content with Claude to extract expense information.
 
     Args:
         text: The email or document text to parse
-        subject: Optional subject line for context
 
     Returns:
         dict with parsed expense data or error information
@@ -52,12 +48,7 @@ def parse_text_with_claude(text: str, subject: str = None) -> dict:
     # Limit text length to avoid token limits
     text = text[:5000]
 
-    subject_line = f"Subject: {subject}" if subject else ""
-
-    prompt = PARSE_PROMPT.format(
-        subject_line=subject_line,
-        content=text
-    )
+    prompt = PARSE_PROMPT.format(content=text)
 
     try:
         message = client.messages.create(
@@ -129,10 +120,7 @@ def parse_pdf_with_claude(pdf_data: bytes, filename: str = None) -> dict:
                 'error': 'Could not extract text from PDF. The PDF may be image-based or empty.'
             }
 
-        # Use filename as subject for context
-        subject = filename if filename else "PDF Document"
-
-        return parse_text_with_claude(text, subject)
+        return parse_text_with_claude(text)
 
     except ImportError:
         return {

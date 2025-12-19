@@ -3,9 +3,9 @@
 This phase implements three ways to add expenses:
 1. **Manual Entry** - Fill out a form with all expense details
 2. **Paste Email Text** - Paste email content for AI parsing
-3. **Upload PDF** - Upload an invoice/receipt for AI parsing
+3. **Upload PDF** - Drag and drop an invoice/receipt for AI parsing
 
-For options 2 and 3, the AI-extracted data is displayed in the same form as manual entry, allowing the user to review and confirm before saving.
+For options 2 and 3, the AI-extracted data is displayed in the same form as manual entry, allowing the user to review before saving.
 
 ## Input Methods
 
@@ -31,17 +31,15 @@ User fills out a form with all expense fields directly.
 │  │ Tags: [_________]           │   │
 │  │ Date: [____-__-__]          │   │
 │  │ Invoice #: [_________]      │   │
-│  │ Status: [Paid ▼]            │   │
 │  └─────────────────────────────┘   │
-│  [Cancel]              [Save Draft] │
+│  [Cancel]                    [Save] │
 └─────────────────────────────────────┘
 ```
 
 **Behavior:**
 - All fields are editable
 - Source type set to `manual`
-- Saved as `draft` status
-- User can confirm later from expense list
+- Expense is saved immediately (no draft state)
 
 ### 2. Paste Email Text
 
@@ -56,8 +54,6 @@ User pastes raw email text, Claude extracts expense data, user reviews in form.
 ┌─────────────────────────────────────┐
 │  Paste Email Text Modal             │
 │  ┌─────────────────────────────┐   │
-│  │ Subject: [optional]         │   │
-│  │                             │   │
 │  │ Email Body:                 │   │
 │  │ [________________________]  │   │
 │  │ [________________________]  │   │
@@ -76,22 +72,21 @@ User pastes raw email text, Claude extracts expense data, user reviews in form.
 │  │ Vendor: [DigitalOcean]      │   │
 │  │ ... (all fields editable)   │   │
 │  └─────────────────────────────┘   │
-│  [Cancel]              [Save Draft] │
+│  [Cancel]                    [Save] │
 └─────────────────────────────────────┘
 ```
 
 **Behavior:**
-- User pastes email text (and optional subject)
+- User pastes email text
 - Click "Parse with AI" sends to Claude
 - Loading state while parsing
 - Pre-filled form appears with extracted data
 - User can edit any field before saving
 - Source type set to `email_text`
-- Saved as `draft` status
 
-### 3. Upload PDF
+### 3. Upload PDF (Drag and Drop)
 
-User uploads a PDF invoice/receipt, Claude extracts expense data, user reviews in form.
+User drags and drops a PDF invoice/receipt. Parsing starts automatically on drop.
 
 **Flow:**
 ```
@@ -102,16 +97,18 @@ User uploads a PDF invoice/receipt, Claude extracts expense data, user reviews i
 ┌─────────────────────────────────────┐
 │  Upload PDF Modal                   │
 │  ┌─────────────────────────────┐   │
-│  │                             │   │
-│  │   [Choose File]             │   │
-│  │   or drag & drop            │   │
-│  │                             │   │
-│  │   invoice.pdf (selected)    │   │
+│  │  ┌───────────────────────┐  │   │
+│  │  │                       │  │   │
+│  │  │   Drop PDF here       │  │   │
+│  │  │   or click to browse  │  │   │
+│  │  │                       │  │   │
+│  │  └───────────────────────┘  │   │
 │  │                             │   │
 │  └─────────────────────────────┘   │
-│  [Cancel]           [Parse with AI] │
+│  [Cancel]                          │
 └─────────────────┬───────────────────┘
                   │
+                  │  (file dropped - auto-upload)
                   ▼  (loading spinner)
 ┌─────────────────────────────────────┐
 │  Review Extracted Data Modal        │
@@ -123,19 +120,35 @@ User uploads a PDF invoice/receipt, Claude extracts expense data, user reviews i
 │  │                             │   │
 │  │ Attached: invoice.pdf ✓     │   │
 │  └─────────────────────────────┘   │
-│  [Cancel]              [Save Draft] │
+│  [Cancel]                    [Save] │
 └─────────────────────────────────────┘
 ```
 
 **Behavior:**
-- User selects or drags PDF file
-- Click "Parse with AI" extracts text and sends to Claude
+- User drags PDF onto drop zone (or clicks to browse)
+- Parsing starts automatically when file is dropped
 - Loading state while parsing
 - Pre-filled form appears with extracted data
 - PDF is attached to the expense record
 - User can edit any field before saving
 - Source type set to `pdf_upload`
-- Saved as `draft` status with `has_attachments = true`
+
+## Display Formatting
+
+### Thousands Separators
+
+All monetary amounts should be displayed with thousands separators for readability:
+
+| Raw Value | Displayed |
+|-----------|-----------|
+| 1000 | 1,000.00 |
+| 12500.50 | 12,500.50 |
+| 1000000 | 1,000,000.00 |
+
+This applies to:
+- Expense list items
+- Stats cards (Total Income, Total Costs, Net)
+- Form inputs (display only, not for editing)
 
 ## Claude AI Integration
 
@@ -156,10 +169,7 @@ Return a JSON object with these fields:
 - tags (array of relevant tags like ["software", "hosting"])
 - vendor_name (company name)
 - invoice_number (if present)
-- payment_status (if mentioned: "paid", "unpaid", or "pending")
 - expense_date (YYYY-MM-DD format if mentioned)
-
-Subject: {subject}
 
 Content:
 {body}
@@ -186,7 +196,7 @@ def parse_pdf_with_claude(pdf_data: bytes, filename: str) -> dict:
     text = text[:5000]
 
     # Send to Claude
-    return parse_text_with_claude(text, subject=filename)
+    return parse_text_with_claude(text)
 ```
 
 ### Example Response
@@ -201,7 +211,6 @@ def parse_pdf_with_claude(pdf_data: bytes, filename: str) -> dict:
   "tags": ["hosting", "infrastructure"],
   "vendor_name": "DigitalOcean",
   "invoice_number": "INV-2024-12345",
-  "payment_status": "paid",
   "expense_date": "2024-01-15"
 }
 ```
@@ -224,8 +233,7 @@ Parse email text with Claude AI.
 **Request:**
 ```json
 {
-  "text": "Your monthly invoice for $49.99...",
-  "subject": "Invoice #12345"
+  "text": "Your monthly invoice for $49.99..."
 }
 ```
 
@@ -242,7 +250,6 @@ Parse email text with Claude AI.
     "tags": ["subscription"],
     "vendor_name": "Example Corp",
     "invoice_number": "12345",
-    "payment_status": "unpaid",
     "expense_date": "2024-01-15"
   }
 }
@@ -267,7 +274,6 @@ Parse uploaded PDF with Claude AI.
     "tags": ["cloud", "infrastructure"],
     "vendor_name": "AWS",
     "invoice_number": "INV-2024-001",
-    "payment_status": "paid",
     "expense_date": "2024-01-10"
   },
   "filename": "aws-invoice.pdf"
@@ -288,7 +294,6 @@ Create a new expense (used for all input methods).
   "tags": ["hosting"],
   "vendor_name": "DigitalOcean",
   "invoice_number": "INV-12345",
-  "payment_status": "paid",
   "expense_date": "2024-01-15",
   "source_type": "email_text",
   "attachment_data": "<base64 encoded PDF>",
@@ -326,17 +331,15 @@ Fields:
 - Tags (comma-separated)
 - Expense Date (date picker)
 - Invoice Number (text)
-- Payment Status (dropdown: paid/unpaid/pending/unknown)
 
 ## Testing Checklist
 
 ### Manual Entry
 - [ ] Open modal with blank form
 - [ ] Fill all fields
-- [ ] Save as draft
-- [ ] Verify expense appears in list
+- [ ] Save expense
+- [ ] Verify expense appears in list with formatted amount
 - [ ] Edit the expense
-- [ ] Confirm the expense
 
 ### Paste Email Text
 - [ ] Paste sample invoice email
@@ -344,14 +347,19 @@ Fields:
 - [ ] Verify fields are pre-filled correctly
 - [ ] Edit a field before saving
 - [ ] Save and verify in list
-- [ ] Test with malformed email (should handle gracefully)
 
 ### Upload PDF
-- [ ] Upload sample invoice PDF
-- [ ] Click parse, see loading state
+- [ ] Drag PDF onto drop zone
+- [ ] Verify auto-upload starts immediately
+- [ ] See loading state while parsing
 - [ ] Verify fields are pre-filled correctly
 - [ ] Verify PDF is attached
 - [ ] Save and verify in list
 - [ ] Download attached PDF
 - [ ] Test with non-PDF file (should reject)
 - [ ] Test with empty/corrupted PDF (should handle gracefully)
+
+### Number Formatting
+- [ ] Verify amounts show thousands separators (e.g., 1,000.00)
+- [ ] Verify stats cards use formatted numbers
+- [ ] Verify expense list uses formatted numbers

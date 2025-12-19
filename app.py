@@ -57,12 +57,12 @@ def migrate_db():
 #         expenses = fetch_new_emails()
 #
 #         for expense_data in expenses:
-#             expense = Expense(**expense_data, status='draft')
+#             expense = Expense(**expense_data)
 #             db.session.add(expense)
 #
 #         if expenses:
 #             db.session.commit()
-#             print(f"Created {len(expenses)} draft expenses")
+#             print(f"Created {len(expenses)} expenses")
 #
 #
 # # Initialize scheduler
@@ -78,7 +78,7 @@ def migrate_db():
 
 @app.route('/')
 def index():
-    """Main page showing drafts and stats."""
+    """Main page showing expenses and stats."""
     return render_template('index.html')
 
 
@@ -86,14 +86,11 @@ def index():
 def expenses_list():
     """Get expenses with optional filtering, or create a new expense."""
     if request.method == 'GET':
-        status = request.args.get('status')
         expense_type = request.args.get('type')
         cost_category = request.args.get('cost_category')
 
         query = Expense.query
 
-        if status:
-            query = query.filter_by(status=status)
         if expense_type:
             query = query.filter_by(type=expense_type)
         if cost_category:
@@ -134,11 +131,9 @@ def expenses_list():
             currency=data.get('currency', 'USD'),
             explanation=data.get('explanation'),
             tags=data.get('tags', []),
-            status='draft',
             source_type=data.get('source_type', 'manual'),
             vendor_name=data.get('vendor_name'),
             invoice_number=data.get('invoice_number'),
-            payment_status=data.get('payment_status'),
             expense_date=expense_date,
             attachment_data=attachment_data,
             attachment_filename=attachment_filename,
@@ -155,10 +150,10 @@ def expenses_list():
 def expense_detail(expense_id):
     """Get, update, or delete a specific expense."""
     expense = Expense.query.get_or_404(expense_id)
-    
+
     if request.method == 'GET':
         return jsonify(expense.to_dict())
-    
+
     elif request.method == 'PUT':
         data = request.json
 
@@ -175,14 +170,10 @@ def expense_detail(expense_id):
             expense.explanation = data['explanation']
         if 'tags' in data:
             expense.tags = data['tags']
-        if 'status' in data:
-            expense.status = data['status']
         if 'vendor_name' in data:
             expense.vendor_name = data['vendor_name']
         if 'invoice_number' in data:
             expense.invoice_number = data['invoice_number']
-        if 'payment_status' in data:
-            expense.payment_status = data['payment_status']
         if 'expense_date' in data:
             if data['expense_date']:
                 try:
@@ -194,30 +185,21 @@ def expense_detail(expense_id):
 
         db.session.commit()
         return jsonify(expense.to_dict())
-    
+
     elif request.method == 'DELETE':
         db.session.delete(expense)
         db.session.commit()
         return '', 204
 
 
-@app.route('/api/expenses/<int:expense_id>/confirm', methods=['POST'])
-def confirm_expense(expense_id):
-    """Confirm a draft expense."""
-    expense = Expense.query.get_or_404(expense_id)
-    expense.status = 'confirmed'
-    db.session.commit()
-    return jsonify(expense.to_dict())
-
-
 @app.route('/api/expenses/<int:expense_id>/pdf')
 def download_pdf(expense_id):
     """Download PDF attachment."""
     expense = Expense.query.get_or_404(expense_id)
-    
+
     if not expense.attachment_data:
         return jsonify({'error': 'No attachment'}), 404
-    
+
     return send_file(
         BytesIO(expense.attachment_data),
         mimetype='application/pdf',
@@ -235,9 +217,8 @@ def parse_text():
         return jsonify({'success': False, 'error': 'No text provided'}), 400
 
     text = data.get('text', '')
-    subject = data.get('subject', '')
 
-    result = parse_text_with_claude(text, subject)
+    result = parse_text_with_claude(text)
 
     if 'error' in result:
         return jsonify({'success': False, 'error': result['error']}), 400
@@ -283,33 +264,25 @@ def parse_pdf():
 @app.route('/api/stats')
 def get_stats():
     """Get expense statistics."""
-    confirmed_expenses = Expense.query.filter_by(status='confirmed')
-    
     # Total income and costs
     income = db.session.query(func.sum(Expense.amount)).filter(
-        Expense.type == 'income',
-        Expense.status == 'confirmed'
+        Expense.type == 'income'
     ).scalar() or 0
-    
+
     costs = db.session.query(func.sum(Expense.amount)).filter(
-        Expense.type == 'cost',
-        Expense.status == 'confirmed'
+        Expense.type == 'cost'
     ).scalar() or 0
-    
+
     # Count by type
-    income_count = confirmed_expenses.filter_by(type='income').count()
-    cost_count = confirmed_expenses.filter_by(type='cost').count()
-    
-    # Draft count
-    draft_count = Expense.query.filter_by(status='draft').count()
-    
+    income_count = Expense.query.filter_by(type='income').count()
+    cost_count = Expense.query.filter_by(type='cost').count()
+
     # By vendor
     vendor_stats = db.session.query(
         Expense.vendor_name,
         func.sum(Expense.amount).label('total'),
         func.count(Expense.id).label('count')
     ).filter(
-        Expense.status == 'confirmed',
         Expense.type == 'cost',
         Expense.vendor_name != None
     ).group_by(
@@ -317,14 +290,13 @@ def get_stats():
     ).order_by(
         func.sum(Expense.amount).desc()
     ).limit(10).all()
-    
+
     return jsonify({
         'total_income': float(income),
         'total_costs': float(costs),
         'net': float(income - costs),
         'income_count': income_count,
         'cost_count': cost_count,
-        'draft_count': draft_count,
         'top_vendors': [
             {'name': v[0], 'total': float(v[1]), 'count': v[2]}
             for v in vendor_stats

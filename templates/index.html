@@ -39,27 +39,6 @@
         .stat-card.cost .value { color: #ef4444; }
         .stat-card.net .value { color: #3b82f6; }
 
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e5e5e5;
-        }
-        .tab {
-            padding: 10px 20px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            color: #666;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-        }
-        .tab.active {
-            color: #3b82f6;
-            border-bottom-color: #3b82f6;
-        }
-
         .expense-list {
             background: white;
             border-radius: 8px;
@@ -152,10 +131,6 @@
 
         .btn-primary {
             background: #3b82f6;
-            color: white;
-        }
-        .btn-confirm {
-            background: #10b981;
             color: white;
         }
         .btn-edit {
@@ -273,6 +248,35 @@
         }
 
         .hidden { display: none !important; }
+
+        /* Drag and drop zone */
+        .drop-zone {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .drop-zone:hover {
+            border-color: #3b82f6;
+            background: #f8fafc;
+        }
+        .drop-zone.drag-over {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+        .drop-zone-text {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .drop-zone-hint {
+            color: #999;
+            font-size: 12px;
+        }
+        .drop-zone input[type="file"] {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -286,12 +290,6 @@
         </div>
 
         <div class="stats" id="stats"></div>
-
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('drafts')">Drafts</button>
-            <button class="tab" onclick="switchTab('confirmed')">Confirmed</button>
-            <button class="tab" onclick="switchTab('all')">All</button>
-        </div>
 
         <div class="expense-list" id="expenseList"></div>
     </div>
@@ -359,25 +357,14 @@
                     </div>
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Payment Status</label>
-                        <select id="expensePaymentStatus">
-                            <option value="">-- Select --</option>
-                            <option value="paid">Paid</option>
-                            <option value="unpaid">Unpaid</option>
-                            <option value="pending">Pending</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Tags (comma-separated)</label>
-                        <input type="text" id="expenseTags">
-                    </div>
+                <div class="form-group">
+                    <label>Tags (comma-separated)</label>
+                    <input type="text" id="expenseTags">
                 </div>
 
                 <div class="form-actions">
                     <button type="button" class="btn-cancel" onclick="closeExpenseModal()">Cancel</button>
-                    <button type="submit" class="btn-confirm">Save</button>
+                    <button type="submit" class="btn-primary">Save</button>
                 </div>
             </form>
         </div>
@@ -393,12 +380,8 @@
             </div>
             <form id="pasteEmailForm">
                 <div class="form-group">
-                    <label>Subject (optional)</label>
-                    <input type="text" id="emailSubject" placeholder="Email subject line">
-                </div>
-                <div class="form-group">
-                    <label>Email Body *</label>
-                    <textarea id="emailBody" rows="10" placeholder="Paste the email content here..." required></textarea>
+                    <label>Email Content *</label>
+                    <textarea id="emailBody" rows="12" placeholder="Paste the email or invoice content here..." required></textarea>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-cancel" onclick="closePasteEmailModal()">Cancel</button>
@@ -416,21 +399,25 @@
             <div id="uploadPdfParsing" class="parsing-indicator hidden">
                 <span class="spinner"></span> Parsing PDF with AI...
             </div>
-            <form id="uploadPdfForm">
-                <div class="form-group">
-                    <label>Select PDF File *</label>
-                    <input type="file" id="pdfFile" accept=".pdf" required>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-cancel" onclick="closeUploadPdfModal()">Cancel</button>
-                    <button type="submit" class="btn-primary">Parse with AI</button>
-                </div>
-            </form>
+            <div id="uploadPdfDropZone" class="drop-zone">
+                <div class="drop-zone-text">Drop PDF here</div>
+                <div class="drop-zone-hint">or click to browse</div>
+                <input type="file" id="pdfFile" accept=".pdf">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn-cancel" onclick="closeUploadPdfModal()">Cancel</button>
+            </div>
         </div>
     </div>
 
     <script>
-        let currentTab = 'drafts';
+        // Format number with thousands separator
+        function formatNumber(num) {
+            return num.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
 
         // Load stats
         async function loadStats() {
@@ -440,33 +427,24 @@
             document.getElementById('stats').innerHTML = `
                 <div class="stat-card income">
                     <h3>Total Income</h3>
-                    <div class="value">$${stats.total_income.toFixed(2)}</div>
+                    <div class="value">$${formatNumber(stats.total_income)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">${stats.income_count} transactions</div>
                 </div>
                 <div class="stat-card cost">
                     <h3>Total Costs</h3>
-                    <div class="value">$${stats.total_costs.toFixed(2)}</div>
+                    <div class="value">$${formatNumber(stats.total_costs)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">${stats.cost_count} transactions</div>
                 </div>
                 <div class="stat-card net">
                     <h3>Net</h3>
-                    <div class="value">$${stats.net.toFixed(2)}</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Drafts</h3>
-                    <div class="value">${stats.draft_count}</div>
+                    <div class="value">$${formatNumber(stats.net)}</div>
                 </div>
             `;
         }
 
         // Load expenses
         async function loadExpenses() {
-            const params = new URLSearchParams();
-            if (currentTab !== 'all') {
-                params.append('status', currentTab === 'drafts' ? 'draft' : 'confirmed');
-            }
-
-            const response = await fetch(`/api/expenses?${params}`);
+            const response = await fetch('/api/expenses');
             const expenses = await response.json();
 
             const list = document.getElementById('expenseList');
@@ -487,9 +465,8 @@
                         <div class="vendor">${e.vendor_name || 'Unknown Vendor'}</div>
                         <div class="explanation">${e.explanation || ''}</div>
                         <div class="meta">
-                            ${e.expense_date ? `Date: ${e.expense_date} | ` : ''}
-                            ${e.invoice_number ? `Invoice: ${e.invoice_number} | ` : ''}
-                            ${e.payment_status ? `Status: ${e.payment_status}` : ''}
+                            ${e.expense_date ? `Date: ${e.expense_date}` : ''}
+                            ${e.invoice_number ? ` | Invoice: ${e.invoice_number}` : ''}
                         </div>
                         ${e.tags && e.tags.length > 0 ? `
                             <div class="tags">
@@ -497,11 +474,8 @@
                             </div>
                         ` : ''}
                     </div>
-                    <div class="expense-amount">${e.currency} ${parseFloat(e.amount).toFixed(2)}</div>
+                    <div class="expense-amount">${e.currency} ${formatNumber(parseFloat(e.amount))}</div>
                     <div class="expense-actions">
-                        ${e.status === 'draft' ? `
-                            <button class="btn-confirm" onclick="confirmExpense(${e.id})">Confirm</button>
-                        ` : ''}
                         <button class="btn-edit" onclick="editExpense(${e.id})">Edit</button>
                         ${e.has_attachments ? `
                             <button class="btn-pdf" onclick="downloadPdf(${e.id})">PDF</button>
@@ -522,20 +496,7 @@
             return labels[sourceType] || sourceType;
         }
 
-        function switchTab(tab) {
-            currentTab = tab;
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            loadExpenses();
-        }
-
         // Expense actions
-        async function confirmExpense(id) {
-            await fetch(`/api/expenses/${id}/confirm`, { method: 'POST' });
-            loadStats();
-            loadExpenses();
-        }
-
         async function deleteExpense(id) {
             if (!confirm('Delete this expense?')) return;
             await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
@@ -589,7 +550,6 @@
             document.getElementById('expenseExplanation').value = expense.explanation || '';
             document.getElementById('expenseDate').value = expense.expense_date || '';
             document.getElementById('expenseInvoice').value = expense.invoice_number || '';
-            document.getElementById('expensePaymentStatus').value = expense.payment_status || '';
             document.getElementById('expenseTags').value = expense.tags ? expense.tags.join(', ') : '';
             document.getElementById('expenseAttachmentData').value = '';
             document.getElementById('expenseAttachmentFilename').value = '';
@@ -617,7 +577,6 @@
                 explanation: document.getElementById('expenseExplanation').value || null,
                 expense_date: document.getElementById('expenseDate').value || null,
                 invoice_number: document.getElementById('expenseInvoice').value || null,
-                payment_status: document.getElementById('expensePaymentStatus').value || null,
                 tags: document.getElementById('expenseTags').value.split(',').map(t => t.trim()).filter(t => t),
                 source_type: document.getElementById('expenseSourceType').value
             };
@@ -671,7 +630,6 @@
         document.getElementById('pasteEmailForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const subject = document.getElementById('emailSubject').value;
             const text = document.getElementById('emailBody').value;
 
             document.getElementById('pasteEmailError').classList.add('hidden');
@@ -681,7 +639,7 @@
                 const response = await fetch('/api/parse-text', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, subject })
+                    body: JSON.stringify({ text })
                 });
 
                 const result = await response.json();
@@ -701,11 +659,12 @@
             }
         });
 
-        // Upload PDF Modal
+        // Upload PDF Modal with drag and drop
         function openUploadPdfModal() {
-            document.getElementById('uploadPdfForm').reset();
+            document.getElementById('pdfFile').value = '';
             document.getElementById('uploadPdfError').classList.add('hidden');
             document.getElementById('uploadPdfParsing').classList.add('hidden');
+            document.getElementById('uploadPdfDropZone').classList.remove('hidden');
             document.getElementById('uploadPdfModal').classList.add('show');
         }
 
@@ -713,19 +672,46 @@
             document.getElementById('uploadPdfModal').classList.remove('show');
         }
 
-        document.getElementById('uploadPdfForm').addEventListener('submit', async (e) => {
+        // Drag and drop functionality
+        const dropZone = document.getElementById('uploadPdfDropZone');
+        const pdfFileInput = document.getElementById('pdfFile');
+
+        dropZone.addEventListener('click', () => pdfFileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
 
-            const fileInput = document.getElementById('pdfFile');
-            const file = fileInput.files[0];
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
 
-            if (!file) {
-                document.getElementById('uploadPdfError').textContent = 'Please select a PDF file';
-                document.getElementById('uploadPdfError').classList.remove('hidden');
-                return;
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                    uploadPdfFile(file);
+                } else {
+                    document.getElementById('uploadPdfError').textContent = 'Please drop a PDF file';
+                    document.getElementById('uploadPdfError').classList.remove('hidden');
+                }
             }
+        });
 
+        pdfFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadPdfFile(e.target.files[0]);
+            }
+        });
+
+        async function uploadPdfFile(file) {
             document.getElementById('uploadPdfError').classList.add('hidden');
+            document.getElementById('uploadPdfDropZone').classList.add('hidden');
             document.getElementById('uploadPdfParsing').classList.remove('hidden');
 
             try {
@@ -749,10 +735,11 @@
 
             } catch (error) {
                 document.getElementById('uploadPdfParsing').classList.add('hidden');
+                document.getElementById('uploadPdfDropZone').classList.remove('hidden');
                 document.getElementById('uploadPdfError').textContent = error.message;
                 document.getElementById('uploadPdfError').classList.remove('hidden');
             }
-        });
+        }
 
         // Open expense modal with pre-filled data from AI parsing
         function openExpenseModalWithData(data, sourceType, attachmentData = null, attachmentFilename = null) {
@@ -771,7 +758,6 @@
             document.getElementById('expenseExplanation').value = data.explanation || '';
             document.getElementById('expenseDate').value = data.expense_date || '';
             document.getElementById('expenseInvoice').value = data.invoice_number || '';
-            document.getElementById('expensePaymentStatus').value = data.payment_status || '';
             document.getElementById('expenseTags').value = data.tags ? data.tags.join(', ') : '';
 
             // Store attachment data if present

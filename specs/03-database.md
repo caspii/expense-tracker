@@ -15,16 +15,12 @@ CREATE TABLE expenses (
     explanation TEXT,
     tags VARCHAR[] DEFAULT '{}',
 
-    -- Workflow
-    status VARCHAR(20) NOT NULL DEFAULT 'draft',  -- 'draft' or 'confirmed'
-
     -- Source information
-    source_type VARCHAR(20),  -- 'manual', 'email_text', 'pdf_upload', 'email_auto' (phase 2)
+    source_type VARCHAR(20),  -- 'manual', 'email_text', 'pdf_upload', 'email_auto' (phase 3)
     vendor_name VARCHAR(255),
     invoice_number VARCHAR(100),
-    payment_status VARCHAR(50),  -- 'paid', 'unpaid', 'pending', NULL
 
-    -- Email metadata (for text paste and phase 2)
+    -- Email metadata (for phase 3)
     sender_email VARCHAR(255),
     sender_domain VARCHAR(255),
     email_subject VARCHAR(500),
@@ -40,7 +36,6 @@ CREATE TABLE expenses (
 );
 
 -- Indexes for common queries
-CREATE INDEX idx_expenses_status ON expenses(status);
 CREATE INDEX idx_expenses_type ON expenses(type);
 CREATE INDEX idx_expenses_vendor ON expenses(vendor_name);
 CREATE INDEX idx_expenses_created ON expenses(created_at DESC);
@@ -58,12 +53,10 @@ CREATE INDEX idx_expenses_cost_category ON expenses(cost_category);
 | `currency` | String | 3-letter ISO code | "USD" |
 | `explanation` | Text | What the expense is for | "Monthly hosting fee" |
 | `tags` | Array | Categories/labels | ["software", "hosting"] |
-| `status` | String | "draft" or "confirmed" | "draft" |
 | `source_type` | String | How expense was created | "manual", "email_text", "pdf_upload" |
 | `vendor_name` | String | Company name | "DigitalOcean" |
 | `invoice_number` | String | Invoice/bill ID | "INV-2024-001" |
-| `payment_status` | String | Payment state | "paid" |
-| `sender_email` | String | Email sender (if from text) | "billing@digitalocean.com" |
+| `sender_email` | String | Email sender (phase 3) | "billing@digitalocean.com" |
 | `sender_domain` | String | Domain of sender | "digitalocean.com" |
 | `email_subject` | String | Original subject | "Invoice #12345" |
 | `attachment_filename` | String | PDF filename | "invoice.pdf" |
@@ -79,7 +72,7 @@ CREATE INDEX idx_expenses_cost_category ON expenses(cost_category);
 | `manual` | User entered all fields manually |
 | `email_text` | User pasted email text, AI extracted data |
 | `pdf_upload` | User uploaded PDF, AI extracted data |
-| `email_auto` | (Phase 2) Automatically fetched via IMAP |
+| `email_auto` | (Phase 3) Automatically fetched via IMAP |
 
 ## Cost Categories
 
@@ -97,23 +90,6 @@ Categories for classifying costs (not applicable to income):
 - For income records, this field should be NULL
 - AI parsing will attempt to infer the category based on vendor and description
 
-## Status Workflow
-
-```
-┌────────────┐     Confirm      ┌─────────────┐
-│   draft    │ ───────────────► │  confirmed  │
-└────────────┘                  └─────────────┘
-      │                                │
-      │         Delete                 │  Delete
-      ▼                                ▼
- ┌──────────┐                    ┌──────────┐
- │ (deleted)│                    │ (deleted)│
- └──────────┘                    └──────────┘
-```
-
-- **draft**: New expense awaiting review (from AI parsing or manual entry)
-- **confirmed**: User has verified the expense is correct
-
 ## Important Code Patterns
 
 ### Database URL Handling
@@ -130,7 +106,6 @@ if SQLALCHEMY_DATABASE_URI.startswith('postgres://'):
 
 ```python
 income = db.session.query(func.sum(Expense.amount)).filter(
-    Expense.type == 'income',
-    Expense.status == 'confirmed'
+    Expense.type == 'income'
 ).scalar() or 0
 ```
