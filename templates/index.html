@@ -12,8 +12,15 @@
             padding: 20px;
         }
         .container { max-width: 1200px; margin: 0 auto; }
-        h1 { margin-bottom: 30px; color: #333; }
-        
+        h1 { margin-bottom: 20px; color: #333; }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -31,7 +38,7 @@
         .stat-card.income .value { color: #10b981; }
         .stat-card.cost .value { color: #ef4444; }
         .stat-card.net .value { color: #3b82f6; }
-        
+
         .tabs {
             display: flex;
             gap: 10px;
@@ -52,7 +59,7 @@
             color: #3b82f6;
             border-bottom-color: #3b82f6;
         }
-        
+
         .expense-list {
             background: white;
             border-radius: 8px;
@@ -68,7 +75,13 @@
             align-items: center;
         }
         .expense-item:last-child { border-bottom: none; }
-        
+
+        .expense-type-col {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: center;
+        }
         .expense-type {
             width: 80px;
             padding: 4px 8px;
@@ -79,7 +92,24 @@
         }
         .expense-type.income { background: #d1fae5; color: #065f46; }
         .expense-type.cost { background: #fee2e2; color: #991b1b; }
-        
+
+        .category-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .category-badge.operations { background: #dbeafe; color: #1e40af; }
+        .category-badge.freelancers { background: #fce7f3; color: #9d174d; }
+        .category-badge.equipment { background: #fef3c7; color: #92400e; }
+        .category-badge.other { background: #e5e7eb; color: #374151; }
+
+        .source-indicator {
+            font-size: 10px;
+            color: #9ca3af;
+        }
+
         .expense-details { flex: 1; }
         .expense-details .vendor { font-weight: bold; color: #333; }
         .expense-details .explanation { color: #666; font-size: 14px; margin-top: 4px; }
@@ -97,14 +127,14 @@
             font-size: 11px;
             color: #374151;
         }
-        
+
         .expense-amount {
             font-size: 20px;
             font-weight: bold;
             color: #333;
             text-align: right;
         }
-        
+
         .expense-actions {
             display: flex;
             gap: 10px;
@@ -118,7 +148,12 @@
             transition: opacity 0.2s;
         }
         button:hover { opacity: 0.8; }
-        
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
         .btn-confirm {
             background: #10b981;
             color: white;
@@ -135,18 +170,21 @@
             background: #f59e0b;
             color: white;
         }
-        .btn-check-email {
+        .btn-secondary {
             background: #8b5cf6;
             color: white;
-            margin-bottom: 20px;
         }
-        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
             color: #999;
         }
-        
+
         .modal {
             display: none;
             position: fixed;
@@ -157,6 +195,7 @@
             background: rgba(0,0,0,0.5);
             align-items: center;
             justify-content: center;
+            z-index: 1000;
         }
         .modal.show { display: flex; }
         .modal-content {
@@ -165,6 +204,8 @@
             border-radius: 8px;
             width: 90%;
             max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         .modal h2 { margin-bottom: 20px; }
         .form-group {
@@ -184,6 +225,9 @@
             font-size: 14px;
         }
         .form-group textarea { resize: vertical; min-height: 80px; }
+        .form-group input[type="file"] {
+            padding: 6px;
+        }
         .form-actions {
             display: flex;
             gap: 10px;
@@ -194,73 +238,205 @@
             background: #6b7280;
             color: white;
         }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .parsing-indicator {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .parsing-indicator .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ddd;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📊 Expense Tracker</h1>
-        
-        <button class="btn-check-email" onclick="checkEmails()">📧 Check Emails Now</button>
-        
+        <h1>Expense Tracker</h1>
+
+        <div class="action-buttons">
+            <button class="btn-primary" onclick="openAddManualModal()">+ Add Manual</button>
+            <button class="btn-secondary" onclick="openPasteEmailModal()">Paste Email</button>
+            <button class="btn-success" onclick="openUploadPdfModal()">Upload PDF</button>
+        </div>
+
         <div class="stats" id="stats"></div>
-        
+
         <div class="tabs">
             <button class="tab active" onclick="switchTab('drafts')">Drafts</button>
             <button class="tab" onclick="switchTab('confirmed')">Confirmed</button>
             <button class="tab" onclick="switchTab('all')">All</button>
         </div>
-        
+
         <div class="expense-list" id="expenseList"></div>
     </div>
-    
-    <!-- Edit Modal -->
-    <div class="modal" id="editModal">
+
+    <!-- Add/Edit Expense Modal -->
+    <div class="modal" id="expenseModal">
         <div class="modal-content">
-            <h2>Edit Expense</h2>
-            <form id="editForm">
-                <input type="hidden" id="editId">
-                <div class="form-group">
-                    <label>Amount</label>
-                    <input type="number" id="editAmount" step="0.01" required>
+            <h2 id="expenseModalTitle">Add Expense</h2>
+            <div id="expenseError" class="error-message hidden"></div>
+            <form id="expenseForm">
+                <input type="hidden" id="expenseId">
+                <input type="hidden" id="expenseSourceType" value="manual">
+                <input type="hidden" id="expenseAttachmentData">
+                <input type="hidden" id="expenseAttachmentFilename">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Amount *</label>
+                        <input type="number" id="expenseAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <input type="text" id="expenseCurrency" maxlength="3" value="USD" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Type</label>
-                    <select id="editType" required>
-                        <option value="cost">Cost</option>
-                        <option value="income">Income</option>
-                    </select>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type *</label>
+                        <select id="expenseType" required onchange="toggleCategoryField()">
+                            <option value="cost">Cost</option>
+                            <option value="income">Income</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="categoryGroup">
+                        <label>Category</label>
+                        <select id="expenseCategory">
+                            <option value="">-- Select --</option>
+                            <option value="operations">Operations (SaaS, hosting)</option>
+                            <option value="freelancers">Freelancers</option>
+                            <option value="equipment">Equipment</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
                 </div>
+
                 <div class="form-group">
-                    <label>Currency</label>
-                    <input type="text" id="editCurrency" maxlength="3" required>
+                    <label>Vendor Name</label>
+                    <input type="text" id="expenseVendor">
                 </div>
-                <div class="form-group">
-                    <label>Vendor</label>
-                    <input type="text" id="editVendor">
-                </div>
+
                 <div class="form-group">
                     <label>Explanation</label>
-                    <textarea id="editExplanation"></textarea>
+                    <textarea id="expenseExplanation"></textarea>
                 </div>
-                <div class="form-group">
-                    <label>Tags (comma-separated)</label>
-                    <input type="text" id="editTags">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Expense Date</label>
+                        <input type="date" id="expenseDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Invoice Number</label>
+                        <input type="text" id="expenseInvoice">
+                    </div>
                 </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Payment Status</label>
+                        <select id="expensePaymentStatus">
+                            <option value="">-- Select --</option>
+                            <option value="paid">Paid</option>
+                            <option value="unpaid">Unpaid</option>
+                            <option value="pending">Pending</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tags (comma-separated)</label>
+                        <input type="text" id="expenseTags">
+                    </div>
+                </div>
+
                 <div class="form-actions">
-                    <button type="button" class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+                    <button type="button" class="btn-cancel" onclick="closeExpenseModal()">Cancel</button>
                     <button type="submit" class="btn-confirm">Save</button>
                 </div>
             </form>
         </div>
     </div>
-    
+
+    <!-- Paste Email Text Modal -->
+    <div class="modal" id="pasteEmailModal">
+        <div class="modal-content">
+            <h2>Paste Email Text</h2>
+            <div id="pasteEmailError" class="error-message hidden"></div>
+            <div id="pasteEmailParsing" class="parsing-indicator hidden">
+                <span class="spinner"></span> Parsing with AI...
+            </div>
+            <form id="pasteEmailForm">
+                <div class="form-group">
+                    <label>Subject (optional)</label>
+                    <input type="text" id="emailSubject" placeholder="Email subject line">
+                </div>
+                <div class="form-group">
+                    <label>Email Body *</label>
+                    <textarea id="emailBody" rows="10" placeholder="Paste the email content here..." required></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="closePasteEmailModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Parse with AI</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload PDF Modal -->
+    <div class="modal" id="uploadPdfModal">
+        <div class="modal-content">
+            <h2>Upload PDF</h2>
+            <div id="uploadPdfError" class="error-message hidden"></div>
+            <div id="uploadPdfParsing" class="parsing-indicator hidden">
+                <span class="spinner"></span> Parsing PDF with AI...
+            </div>
+            <form id="uploadPdfForm">
+                <div class="form-group">
+                    <label>Select PDF File *</label>
+                    <input type="file" id="pdfFile" accept=".pdf" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="closeUploadPdfModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Parse with AI</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         let currentTab = 'drafts';
-        
+
+        // Load stats
         async function loadStats() {
             const response = await fetch('/api/stats');
             const stats = await response.json();
-            
+
             document.getElementById('stats').innerHTML = `
                 <div class="stat-card income">
                     <h3>Total Income</h3>
@@ -282,32 +458,38 @@
                 </div>
             `;
         }
-        
+
+        // Load expenses
         async function loadExpenses() {
             const params = new URLSearchParams();
             if (currentTab !== 'all') {
                 params.append('status', currentTab === 'drafts' ? 'draft' : 'confirmed');
             }
-            
+
             const response = await fetch(`/api/expenses?${params}`);
             const expenses = await response.json();
-            
+
             const list = document.getElementById('expenseList');
-            
+
             if (expenses.length === 0) {
                 list.innerHTML = '<div class="empty-state">No expenses found</div>';
                 return;
             }
-            
+
             list.innerHTML = expenses.map(e => `
                 <div class="expense-item">
-                    <div class="expense-type ${e.type}">${e.type.toUpperCase()}</div>
+                    <div class="expense-type-col">
+                        <div class="expense-type ${e.type}">${e.type.toUpperCase()}</div>
+                        ${e.cost_category ? `<span class="category-badge ${e.cost_category}">${e.cost_category}</span>` : ''}
+                        ${e.source_type ? `<span class="source-indicator">${getSourceLabel(e.source_type)}</span>` : ''}
+                    </div>
                     <div class="expense-details">
-                        <div class="vendor">${e.vendor_name || e.sender_email || 'Unknown'}</div>
+                        <div class="vendor">${e.vendor_name || 'Unknown Vendor'}</div>
                         <div class="explanation">${e.explanation || ''}</div>
                         <div class="meta">
-                            ${e.invoice_number ? `Invoice: ${e.invoice_number} • ` : ''}
-                            ${e.email_subject || ''}
+                            ${e.expense_date ? `Date: ${e.expense_date} | ` : ''}
+                            ${e.invoice_number ? `Invoice: ${e.invoice_number} | ` : ''}
+                            ${e.payment_status ? `Status: ${e.payment_status}` : ''}
                         </div>
                         ${e.tags && e.tags.length > 0 ? `
                             <div class="tags">
@@ -318,104 +500,292 @@
                     <div class="expense-amount">${e.currency} ${parseFloat(e.amount).toFixed(2)}</div>
                     <div class="expense-actions">
                         ${e.status === 'draft' ? `
-                            <button class="btn-confirm" onclick="confirmExpense(${e.id})">✓</button>
+                            <button class="btn-confirm" onclick="confirmExpense(${e.id})">Confirm</button>
                         ` : ''}
-                        <button class="btn-edit" onclick="editExpense(${e.id})">✎</button>
+                        <button class="btn-edit" onclick="editExpense(${e.id})">Edit</button>
                         ${e.has_attachments ? `
                             <button class="btn-pdf" onclick="downloadPdf(${e.id})">PDF</button>
                         ` : ''}
-                        <button class="btn-delete" onclick="deleteExpense(${e.id})">×</button>
+                        <button class="btn-delete" onclick="deleteExpense(${e.id})">Delete</button>
                     </div>
                 </div>
             `).join('');
         }
-        
+
+        function getSourceLabel(sourceType) {
+            const labels = {
+                'manual': 'Manual',
+                'email_text': 'Email',
+                'pdf_upload': 'PDF',
+                'email_auto': 'Auto'
+            };
+            return labels[sourceType] || sourceType;
+        }
+
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             event.target.classList.add('active');
             loadExpenses();
         }
-        
+
+        // Expense actions
         async function confirmExpense(id) {
             await fetch(`/api/expenses/${id}/confirm`, { method: 'POST' });
             loadStats();
             loadExpenses();
         }
-        
+
         async function deleteExpense(id) {
             if (!confirm('Delete this expense?')) return;
             await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
             loadStats();
             loadExpenses();
         }
-        
+
         function downloadPdf(id) {
             window.open(`/api/expenses/${id}/pdf`, '_blank');
         }
-        
+
+        // Category field visibility
+        function toggleCategoryField() {
+            const type = document.getElementById('expenseType').value;
+            const categoryGroup = document.getElementById('categoryGroup');
+            if (type === 'cost') {
+                categoryGroup.classList.remove('hidden');
+            } else {
+                categoryGroup.classList.add('hidden');
+                document.getElementById('expenseCategory').value = '';
+            }
+        }
+
+        // Add Manual Modal
+        function openAddManualModal() {
+            document.getElementById('expenseModalTitle').textContent = 'Add Expense';
+            document.getElementById('expenseForm').reset();
+            document.getElementById('expenseId').value = '';
+            document.getElementById('expenseSourceType').value = 'manual';
+            document.getElementById('expenseAttachmentData').value = '';
+            document.getElementById('expenseAttachmentFilename').value = '';
+            document.getElementById('expenseCurrency').value = 'USD';
+            document.getElementById('expenseError').classList.add('hidden');
+            toggleCategoryField();
+            document.getElementById('expenseModal').classList.add('show');
+        }
+
+        // Edit Expense
         async function editExpense(id) {
             const response = await fetch(`/api/expenses/${id}`);
             const expense = await response.json();
-            
-            document.getElementById('editId').value = expense.id;
-            document.getElementById('editAmount').value = expense.amount;
-            document.getElementById('editType').value = expense.type;
-            document.getElementById('editCurrency').value = expense.currency;
-            document.getElementById('editVendor').value = expense.vendor_name || '';
-            document.getElementById('editExplanation').value = expense.explanation || '';
-            document.getElementById('editTags').value = expense.tags ? expense.tags.join(', ') : '';
-            
-            document.getElementById('editModal').classList.add('show');
+
+            document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
+            document.getElementById('expenseId').value = expense.id;
+            document.getElementById('expenseSourceType').value = expense.source_type || 'manual';
+            document.getElementById('expenseAmount').value = expense.amount;
+            document.getElementById('expenseCurrency').value = expense.currency;
+            document.getElementById('expenseType').value = expense.type;
+            document.getElementById('expenseCategory').value = expense.cost_category || '';
+            document.getElementById('expenseVendor').value = expense.vendor_name || '';
+            document.getElementById('expenseExplanation').value = expense.explanation || '';
+            document.getElementById('expenseDate').value = expense.expense_date || '';
+            document.getElementById('expenseInvoice').value = expense.invoice_number || '';
+            document.getElementById('expensePaymentStatus').value = expense.payment_status || '';
+            document.getElementById('expenseTags').value = expense.tags ? expense.tags.join(', ') : '';
+            document.getElementById('expenseAttachmentData').value = '';
+            document.getElementById('expenseAttachmentFilename').value = '';
+            document.getElementById('expenseError').classList.add('hidden');
+
+            toggleCategoryField();
+            document.getElementById('expenseModal').classList.add('show');
         }
-        
-        function closeEditModal() {
-            document.getElementById('editModal').classList.remove('show');
+
+        function closeExpenseModal() {
+            document.getElementById('expenseModal').classList.remove('show');
         }
-        
-        document.getElementById('editForm').addEventListener('submit', async (e) => {
+
+        // Save expense (create or update)
+        document.getElementById('expenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
-            const id = document.getElementById('editId').value;
+
+            const id = document.getElementById('expenseId').value;
             const data = {
-                amount: parseFloat(document.getElementById('editAmount').value),
-                type: document.getElementById('editType').value,
-                currency: document.getElementById('editCurrency').value,
-                vendor_name: document.getElementById('editVendor').value,
-                explanation: document.getElementById('editExplanation').value,
-                tags: document.getElementById('editTags').value.split(',').map(t => t.trim()).filter(t => t)
+                amount: parseFloat(document.getElementById('expenseAmount').value),
+                currency: document.getElementById('expenseCurrency').value,
+                type: document.getElementById('expenseType').value,
+                cost_category: document.getElementById('expenseCategory').value || null,
+                vendor_name: document.getElementById('expenseVendor').value || null,
+                explanation: document.getElementById('expenseExplanation').value || null,
+                expense_date: document.getElementById('expenseDate').value || null,
+                invoice_number: document.getElementById('expenseInvoice').value || null,
+                payment_status: document.getElementById('expensePaymentStatus').value || null,
+                tags: document.getElementById('expenseTags').value.split(',').map(t => t.trim()).filter(t => t),
+                source_type: document.getElementById('expenseSourceType').value
             };
-            
-            await fetch(`/api/expenses/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            
-            closeEditModal();
-            loadStats();
-            loadExpenses();
-        });
-        
-        async function checkEmails() {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = '⏳ Checking...';
-            
-            await fetch('/api/check-emails', { method: 'POST' });
-            
-            setTimeout(() => {
-                btn.disabled = false;
-                btn.textContent = '📧 Check Emails Now';
+
+            // Include attachment data if present
+            const attachmentData = document.getElementById('expenseAttachmentData').value;
+            const attachmentFilename = document.getElementById('expenseAttachmentFilename').value;
+            if (attachmentData) {
+                data.attachment_data = attachmentData;
+                data.attachment_filename = attachmentFilename;
+            }
+
+            try {
+                if (id) {
+                    // Update existing
+                    await fetch(`/api/expenses/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    // Create new
+                    await fetch('/api/expenses', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
+
+                closeExpenseModal();
                 loadStats();
                 loadExpenses();
-            }, 2000);
+            } catch (error) {
+                document.getElementById('expenseError').textContent = 'Failed to save expense';
+                document.getElementById('expenseError').classList.remove('hidden');
+            }
+        });
+
+        // Paste Email Modal
+        function openPasteEmailModal() {
+            document.getElementById('pasteEmailForm').reset();
+            document.getElementById('pasteEmailError').classList.add('hidden');
+            document.getElementById('pasteEmailParsing').classList.add('hidden');
+            document.getElementById('pasteEmailModal').classList.add('show');
         }
-        
+
+        function closePasteEmailModal() {
+            document.getElementById('pasteEmailModal').classList.remove('show');
+        }
+
+        document.getElementById('pasteEmailForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const subject = document.getElementById('emailSubject').value;
+            const text = document.getElementById('emailBody').value;
+
+            document.getElementById('pasteEmailError').classList.add('hidden');
+            document.getElementById('pasteEmailParsing').classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/parse-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, subject })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'Parsing failed');
+                }
+
+                // Close paste modal and open expense modal with parsed data
+                closePasteEmailModal();
+                openExpenseModalWithData(result.data, 'email_text');
+
+            } catch (error) {
+                document.getElementById('pasteEmailParsing').classList.add('hidden');
+                document.getElementById('pasteEmailError').textContent = error.message;
+                document.getElementById('pasteEmailError').classList.remove('hidden');
+            }
+        });
+
+        // Upload PDF Modal
+        function openUploadPdfModal() {
+            document.getElementById('uploadPdfForm').reset();
+            document.getElementById('uploadPdfError').classList.add('hidden');
+            document.getElementById('uploadPdfParsing').classList.add('hidden');
+            document.getElementById('uploadPdfModal').classList.add('show');
+        }
+
+        function closeUploadPdfModal() {
+            document.getElementById('uploadPdfModal').classList.remove('show');
+        }
+
+        document.getElementById('uploadPdfForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('pdfFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                document.getElementById('uploadPdfError').textContent = 'Please select a PDF file';
+                document.getElementById('uploadPdfError').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('uploadPdfError').classList.add('hidden');
+            document.getElementById('uploadPdfParsing').classList.remove('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/parse-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'Parsing failed');
+                }
+
+                // Close upload modal and open expense modal with parsed data
+                closeUploadPdfModal();
+                openExpenseModalWithData(result.data, 'pdf_upload', result.file_data, result.filename);
+
+            } catch (error) {
+                document.getElementById('uploadPdfParsing').classList.add('hidden');
+                document.getElementById('uploadPdfError').textContent = error.message;
+                document.getElementById('uploadPdfError').classList.remove('hidden');
+            }
+        });
+
+        // Open expense modal with pre-filled data from AI parsing
+        function openExpenseModalWithData(data, sourceType, attachmentData = null, attachmentFilename = null) {
+            document.getElementById('expenseModalTitle').textContent = 'Review Parsed Expense';
+            document.getElementById('expenseForm').reset();
+            document.getElementById('expenseId').value = '';
+            document.getElementById('expenseSourceType').value = sourceType;
+            document.getElementById('expenseError').classList.add('hidden');
+
+            // Fill in parsed data
+            document.getElementById('expenseAmount').value = data.amount || 0;
+            document.getElementById('expenseCurrency').value = data.currency || 'USD';
+            document.getElementById('expenseType').value = data.type || 'cost';
+            document.getElementById('expenseCategory').value = data.cost_category || '';
+            document.getElementById('expenseVendor').value = data.vendor_name || '';
+            document.getElementById('expenseExplanation').value = data.explanation || '';
+            document.getElementById('expenseDate').value = data.expense_date || '';
+            document.getElementById('expenseInvoice').value = data.invoice_number || '';
+            document.getElementById('expensePaymentStatus').value = data.payment_status || '';
+            document.getElementById('expenseTags').value = data.tags ? data.tags.join(', ') : '';
+
+            // Store attachment data if present
+            document.getElementById('expenseAttachmentData').value = attachmentData || '';
+            document.getElementById('expenseAttachmentFilename').value = attachmentFilename || '';
+
+            toggleCategoryField();
+            document.getElementById('expenseModal').classList.add('show');
+        }
+
         // Load data on page load
         loadStats();
         loadExpenses();
-        
+
         // Auto-refresh every 30 seconds
         setInterval(() => {
             loadStats();
