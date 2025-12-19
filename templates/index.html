@@ -426,18 +426,18 @@
 
             document.getElementById('stats').innerHTML = `
                 <div class="stat-card income">
-                    <h3>Total Income</h3>
-                    <div class="value">$${formatNumber(stats.total_income)}</div>
+                    <h3>Total Income (EUR)</h3>
+                    <div class="value">&euro;${formatNumber(stats.total_income)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">${stats.income_count} transactions</div>
                 </div>
                 <div class="stat-card cost">
-                    <h3>Total Costs</h3>
-                    <div class="value">$${formatNumber(stats.total_costs)}</div>
+                    <h3>Total Costs (EUR)</h3>
+                    <div class="value">&euro;${formatNumber(stats.total_costs)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">${stats.cost_count} transactions</div>
                 </div>
                 <div class="stat-card net">
-                    <h3>Net</h3>
-                    <div class="value">$${formatNumber(stats.net)}</div>
+                    <h3>Net (EUR)</h3>
+                    <div class="value">&euro;${formatNumber(stats.net)}</div>
                 </div>
             `;
         }
@@ -474,7 +474,10 @@
                             </div>
                         ` : ''}
                     </div>
-                    <div class="expense-amount">${e.currency} ${formatNumber(parseFloat(e.amount))}</div>
+                    <div class="expense-amount">
+                        ${e.currency} ${formatNumber(parseFloat(e.amount))}
+                        ${e.currency !== 'EUR' && e.amount_eur ? `<div style="font-size: 12px; color: #666;">&euro;${formatNumber(e.amount_eur)}</div>` : ''}
+                    </div>
                     <div class="expense-actions">
                         <button class="btn-edit" onclick="editExpense(${e.id})">Edit</button>
                         ${e.has_attachments ? `

@@ -6,3 +6,4 @@ anthropic>=0.39.0
 python-dotenv==1.0.0
 gunicorn==21.2.0
 PyPDF2==3.0.1
+requests==2.31.0

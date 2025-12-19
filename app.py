@@ -5,7 +5,9 @@ from config import Config
 from models import db, Expense
 # from email_parser import fetch_new_emails  # Phase 3
 from ai_parser import parse_text_with_claude, parse_pdf_with_claude
+from currency import convert_to_eur
 from datetime import datetime, date
+from decimal import Decimal
 from io import BytesIO
 from sqlalchemy import func
 import base64
@@ -43,10 +45,27 @@ def migrate_db():
         ALTER TABLE expenses
         ADD COLUMN IF NOT EXISTS cost_category VARCHAR(20),
         ADD COLUMN IF NOT EXISTS source_type VARCHAR(20),
-        ADD COLUMN IF NOT EXISTS expense_date DATE
+        ADD COLUMN IF NOT EXISTS expense_date DATE,
+        ADD COLUMN IF NOT EXISTS amount_eur NUMERIC(10, 2),
+        ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(10, 6)
     '''))
     db.session.commit()
     click.echo('Database migrated successfully.')
+
+
+@app.cli.command('backfill-eur')
+def backfill_eur():
+    """Backfill EUR conversion for existing expenses."""
+    expenses = Expense.query.filter(Expense.amount_eur == None).all()
+    count = 0
+    for expense in expenses:
+        amount = Decimal(str(expense.amount))
+        amount_eur, exchange_rate = convert_to_eur(amount, expense.currency)
+        expense.amount_eur = amount_eur
+        expense.exchange_rate = exchange_rate
+        count += 1
+    db.session.commit()
+    click.echo(f'Updated {count} expenses with EUR conversion.')
 
 
 # Phase 3: Email automation (commented out for now)
@@ -124,13 +143,22 @@ def expenses_list():
             except Exception:
                 pass
 
+        # Get amount and currency for EUR conversion
+        amount = Decimal(str(data.get('amount', 0)))
+        currency = data.get('currency', 'USD')
+
+        # Convert to EUR
+        amount_eur, exchange_rate = convert_to_eur(amount, currency)
+
         expense = Expense(
-            amount=data.get('amount', 0),
+            amount=amount,
             type=data.get('type', 'cost'),
             cost_category=data.get('cost_category'),
-            currency=data.get('currency', 'USD'),
+            currency=currency,
             explanation=data.get('explanation'),
             tags=data.get('tags', []),
+            amount_eur=amount_eur,
+            exchange_rate=exchange_rate,
             source_type=data.get('source_type', 'manual'),
             vendor_name=data.get('vendor_name'),
             invoice_number=data.get('invoice_number'),
@@ -157,15 +185,20 @@ def expense_detail(expense_id):
     elif request.method == 'PUT':
         data = request.json
 
+        # Track if we need to recalculate EUR conversion
+        recalculate_eur = False
+
         # Update fields
         if 'amount' in data:
             expense.amount = data['amount']
+            recalculate_eur = True
         if 'type' in data:
             expense.type = data['type']
         if 'cost_category' in data:
             expense.cost_category = data['cost_category']
         if 'currency' in data:
             expense.currency = data['currency']
+            recalculate_eur = True
         if 'explanation' in data:
             expense.explanation = data['explanation']
         if 'tags' in data:
@@ -182,6 +215,13 @@ def expense_detail(expense_id):
                     pass
             else:
                 expense.expense_date = None
+
+        # Recalculate EUR conversion if amount or currency changed
+        if recalculate_eur:
+            amount = Decimal(str(expense.amount))
+            amount_eur, exchange_rate = convert_to_eur(amount, expense.currency)
+            expense.amount_eur = amount_eur
+            expense.exchange_rate = exchange_rate
 
         db.session.commit()
         return jsonify(expense.to_dict())
@@ -263,13 +303,13 @@ def parse_pdf():
 
 @app.route('/api/stats')
 def get_stats():
-    """Get expense statistics."""
-    # Total income and costs
-    income = db.session.query(func.sum(Expense.amount)).filter(
+    """Get expense statistics in EUR."""
+    # Total income and costs (using EUR amounts for consistency)
+    income = db.session.query(func.sum(Expense.amount_eur)).filter(
         Expense.type == 'income'
     ).scalar() or 0
 
-    costs = db.session.query(func.sum(Expense.amount)).filter(
+    costs = db.session.query(func.sum(Expense.amount_eur)).filter(
         Expense.type == 'cost'
     ).scalar() or 0
 
@@ -277,10 +317,10 @@ def get_stats():
     income_count = Expense.query.filter_by(type='income').count()
     cost_count = Expense.query.filter_by(type='cost').count()
 
-    # By vendor
+    # By vendor (using EUR amounts)
     vendor_stats = db.session.query(
         Expense.vendor_name,
-        func.sum(Expense.amount).label('total'),
+        func.sum(Expense.amount_eur).label('total'),
         func.count(Expense.id).label('count')
     ).filter(
         Expense.type == 'cost',
@@ -288,7 +328,7 @@ def get_stats():
     ).group_by(
         Expense.vendor_name
     ).order_by(
-        func.sum(Expense.amount).desc()
+        func.sum(Expense.amount_eur).desc()
     ).limit(10).all()
 
     return jsonify({
@@ -298,7 +338,7 @@ def get_stats():
         'income_count': income_count,
         'cost_count': cost_count,
         'top_vendors': [
-            {'name': v[0], 'total': float(v[1]), 'count': v[2]}
+            {'name': v[0], 'total': float(v[1]) if v[1] else 0, 'count': v[2]}
             for v in vendor_stats
         ]
     })

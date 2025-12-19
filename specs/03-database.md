@@ -15,6 +15,10 @@ CREATE TABLE expenses (
     explanation TEXT,
     tags VARCHAR[] DEFAULT '{}',
 
+    -- Euro conversion (for German tax reporting)
+    amount_eur NUMERIC(10, 2),  -- Amount converted to EUR
+    exchange_rate NUMERIC(10, 6),  -- Exchange rate used (1 EUR = X currency)
+
     -- Source information
     source_type VARCHAR(20),  -- 'manual', 'email_text', 'pdf_upload', 'email_auto' (phase 3)
     vendor_name VARCHAR(255),
@@ -47,12 +51,14 @@ CREATE INDEX idx_expenses_cost_category ON expenses(cost_category);
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `amount` | Numeric | Expense amount | 49.99 |
+| `amount` | Numeric | Expense amount in original currency | 49.99 |
 | `type` | String | "income" or "cost" | "cost" |
 | `cost_category` | String | Category for costs only | "operations" |
 | `currency` | String | 3-letter ISO code | "USD" |
 | `explanation` | Text | What the expense is for | "Monthly hosting fee" |
 | `tags` | Array | Categories/labels | ["software", "hosting"] |
+| `amount_eur` | Numeric | Amount converted to EUR | 45.50 |
+| `exchange_rate` | Numeric | ECB rate used for conversion | 1.0987 |
 | `source_type` | String | How expense was created | "manual", "email_text", "pdf_upload" |
 | `vendor_name` | String | Company name | "DigitalOcean" |
 | `invoice_number` | String | Invoice/bill ID | "INV-2024-001" |
@@ -64,6 +70,37 @@ CREATE INDEX idx_expenses_cost_category ON expenses(cost_category);
 | `has_attachments` | Boolean | Has PDF? | true |
 | `expense_date` | Date | When expense occurred | 2024-01-15 |
 | `created_at` | Timestamp | When record created | 2024-01-15 10:45:00 |
+
+## Euro Conversion
+
+All expenses are converted to EUR for consistent tax reporting. This is required for German tax filings (EÜR - Einnahmenüberschussrechnung).
+
+### Conversion Rules
+
+1. **EUR expenses**: `amount_eur = amount`, `exchange_rate = 1.0`
+2. **Other currencies**: Convert using ECB daily reference rate for the expense date
+3. **Exchange rate source**: European Central Bank (ECB) daily rates
+4. **Rate lookup**: Use the expense_date; if no rate available (weekend/holiday), use the most recent available rate
+
+### ECB Rate Feed
+
+The ECB publishes daily reference rates at:
+- Daily XML: `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml`
+- Historical CSV: `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip`
+
+### Conversion Formula
+
+For non-EUR currencies:
+```
+amount_eur = amount / exchange_rate
+```
+
+Where `exchange_rate` is "1 EUR = X foreign currency" (e.g., 1 EUR = 1.0987 USD).
+
+Example:
+- Amount: $49.99 USD
+- ECB rate: 1.0987 (1 EUR = 1.0987 USD)
+- EUR amount: 49.99 / 1.0987 = 45.50 EUR
 
 ## Source Types
 
@@ -104,8 +141,10 @@ if SQLALCHEMY_DATABASE_URI.startswith('postgres://'):
 
 ### Stats Aggregation
 
+Stats should use `amount_eur` for consistent totals:
+
 ```python
-income = db.session.query(func.sum(Expense.amount)).filter(
+income = db.session.query(func.sum(Expense.amount_eur)).filter(
     Expense.type == 'income'
 ).scalar() or 0
 ```

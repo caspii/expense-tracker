@@ -17,6 +17,10 @@ class Expense(db.Model):
     explanation = db.Column(db.Text)
     tags = db.Column(db.ARRAY(db.String), default=list)
 
+    # Euro conversion (for German tax reporting)
+    amount_eur = db.Column(db.Numeric(10, 2))  # Amount converted to EUR
+    exchange_rate = db.Column(db.Numeric(10, 6))  # Exchange rate used (1 EUR = X currency)
+
     # Source
     source_type = db.Column(db.String(20))  # 'manual', 'email_text', 'pdf_upload', 'email_auto'
 
@@ -44,6 +48,8 @@ class Expense(db.Model):
         return {
             'id': self.id,
             'amount': float(self.amount),
+            'amount_eur': float(self.amount_eur) if self.amount_eur else None,
+            'exchange_rate': float(self.exchange_rate) if self.exchange_rate else None,
             'type': self.type,
             'cost_category': self.cost_category,
             'currency': self.currency,

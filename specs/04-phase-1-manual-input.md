@@ -150,6 +150,52 @@ This applies to:
 - Stats cards (Total Income, Total Costs, Net)
 - Form inputs (display only, not for editing)
 
+### Euro Conversion Display
+
+For German tax reporting, all totals in the stats cards should be displayed in EUR:
+
+```
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  Total Income   │  │   Total Costs   │  │       Net       │
+│   €12,500.00    │  │   €8,750.00     │  │   €3,750.00     │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
+
+Individual expense items show:
+- Original amount and currency (e.g., "$49.99 USD")
+- Converted EUR amount when different from original (e.g., "€45.50")
+
+## Euro Conversion
+
+All expenses are automatically converted to EUR when saved. This is required for German tax reporting (EÜR - Einnahmenüberschussrechnung).
+
+### Conversion Rules
+
+1. **EUR expenses**: `amount_eur = amount`, `exchange_rate = 1.0`
+2. **Other currencies**: Convert using ECB daily reference rate for the expense date
+3. **Rate lookup**: Use the expense_date; if no rate available (weekend/holiday), use the most recent available rate
+4. **No expense date**: Use today's rate
+
+### ECB Rate Feed
+
+The ECB publishes daily reference rates at:
+- Daily XML: `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml`
+
+Rates are published around 16:00 CET each working day.
+
+### Conversion Formula
+
+```
+amount_eur = amount / exchange_rate
+```
+
+Where `exchange_rate` is "1 EUR = X foreign currency" (e.g., 1 EUR = 1.0987 USD).
+
+Example:
+- Amount: $49.99 USD
+- ECB rate: 1.0987 (1 EUR = 1.0987 USD)
+- EUR amount: 49.99 / 1.0987 = €45.50
+
 ## Claude AI Integration
 
 ### Parse Text Prompt
@@ -301,7 +347,36 @@ Create a new expense (used for all input methods).
 }
 ```
 
-**Response:** Created expense object
+**Response:** Created expense object with EUR conversion
+```json
+{
+  "id": 1,
+  "amount": 49.99,
+  "amount_eur": 45.50,
+  "exchange_rate": 1.0987,
+  "type": "cost",
+  "cost_category": "operations",
+  "currency": "USD",
+  ...
+}
+```
+
+### GET /api/stats
+Get expense statistics with EUR totals.
+
+**Response:**
+```json
+{
+  "total_income": 12500.00,
+  "total_costs": 8750.00,
+  "net": 3750.00,
+  "income_count": 5,
+  "cost_count": 15,
+  "top_vendors": [...]
+}
+```
+
+Note: All totals (`total_income`, `total_costs`, `net`) are calculated using `amount_eur` for consistent EUR-based reporting.
 
 ## UI Components
 
@@ -363,3 +438,10 @@ Fields:
 - [ ] Verify amounts show thousands separators (e.g., 1,000.00)
 - [ ] Verify stats cards use formatted numbers
 - [ ] Verify expense list uses formatted numbers
+
+### Euro Conversion
+- [ ] Create USD expense, verify amount_eur is calculated
+- [ ] Create EUR expense, verify exchange_rate is 1.0
+- [ ] Verify stats show totals in EUR
+- [ ] Verify expense list shows EUR amount for non-EUR expenses
+- [ ] Test with different currencies (USD, GBP, etc.)
