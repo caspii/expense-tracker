@@ -407,6 +407,67 @@ Fields:
 - Expense Date (date picker)
 - Invoice Number (text)
 
+## Excel Export
+
+Export all expenses to an Excel file (.xlsx) for tax reporting and record keeping.
+
+### Export Button
+
+```
+┌────────────────┐ ┌──────────────┐ ┌────────────┐ ┌──────────────┐
+│ + Add Manually │ │ Paste Email  │ │ Upload PDF │ │ Export Excel │
+└────────────────┘ └──────────────┘ └────────────┘ └──────────────┘
+```
+
+### Excel File Structure
+
+The exported file contains multiple sheets:
+
+**Sheet 1: All Expenses**
+| Column | Description |
+|--------|-------------|
+| Date | Expense date (YYYY-MM-DD) |
+| Type | "Income" or "Cost" |
+| Category | Cost category (for costs only) |
+| Vendor | Vendor name |
+| Explanation | Description |
+| Amount | Original amount |
+| Currency | Original currency code |
+| Amount (EUR) | Converted EUR amount |
+| Exchange Rate | ECB rate used |
+| Invoice # | Invoice number |
+| Tags | Comma-separated tags |
+| Source | How expense was created |
+
+**Sheet 2: Summary**
+| Row | Description |
+|-----|-------------|
+| Total Income (EUR) | Sum of all income in EUR |
+| Total Costs (EUR) | Sum of all costs in EUR |
+| Net (EUR) | Income minus costs |
+| | |
+| Costs by Category | Breakdown by category |
+| - Operations | Total operations costs |
+| - Freelancers | Total freelancer costs |
+| - Equipment | Total equipment costs |
+| - Other | Total other costs |
+
+### API Endpoint
+
+**GET /api/export**
+
+Downloads an Excel file with all expenses.
+
+**Response:** Binary .xlsx file with `Content-Disposition: attachment; filename="expenses_YYYY-MM-DD.xlsx"`
+
+### Export Options (Future)
+
+Future enhancements could include:
+- Date range filtering
+- Export only income or costs
+- Custom column selection
+- PDF attachment bundling
+
 ## Testing Checklist
 
 ### Manual Entry
@@ -445,3 +506,12 @@ Fields:
 - [ ] Verify stats show totals in EUR
 - [ ] Verify expense list shows EUR amount for non-EUR expenses
 - [ ] Test with different currencies (USD, GBP, etc.)
+
+### Excel Export
+- [ ] Click Export Excel button, file downloads
+- [ ] Verify filename includes current date
+- [ ] Open file, verify "All Expenses" sheet has all records
+- [ ] Verify columns match specification
+- [ ] Verify "Summary" sheet has correct totals
+- [ ] Verify category breakdown is accurate
+- [ ] Test with empty database (should still work)

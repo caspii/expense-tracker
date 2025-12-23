@@ -49,11 +49,18 @@
             padding: 20px;
             border-bottom: 1px solid #e5e5e5;
             display: grid;
-            grid-template-columns: auto 1fr auto auto;
+            grid-template-columns: auto 1fr auto;
             gap: 20px;
-            align-items: center;
+            align-items: start;
         }
         .expense-item:last-child { border-bottom: none; }
+
+        .expense-amount-col {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
 
         .expense-type-col {
             display: flex;
@@ -116,7 +123,8 @@
 
         .expense-actions {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            justify-content: flex-end;
         }
         button {
             padding: 8px 16px;
@@ -151,6 +159,10 @@
         }
         .btn-success {
             background: #10b981;
+            color: white;
+        }
+        .btn-export {
+            background: #6366f1;
             color: white;
         }
 
@@ -287,6 +299,7 @@
             <button class="btn-primary" onclick="openAddManualModal()">+ Add Manual</button>
             <button class="btn-secondary" onclick="openPasteEmailModal()">Paste Email</button>
             <button class="btn-success" onclick="openUploadPdfModal()">Upload PDF</button>
+            <button class="btn-export" onclick="exportToExcel()">Export Excel</button>
         </div>
 
         <div class="stats" id="stats"></div>
@@ -474,16 +487,18 @@
                             </div>
                         ` : ''}
                     </div>
-                    <div class="expense-amount">
-                        ${e.currency} ${formatNumber(parseFloat(e.amount))}
-                        ${e.currency !== 'EUR' && e.amount_eur ? `<div style="font-size: 12px; color: #666;">&euro;${formatNumber(e.amount_eur)}</div>` : ''}
-                    </div>
-                    <div class="expense-actions">
-                        <button class="btn-edit" onclick="editExpense(${e.id})">Edit</button>
-                        ${e.has_attachments ? `
-                            <button class="btn-pdf" onclick="downloadPdf(${e.id})">PDF</button>
-                        ` : ''}
-                        <button class="btn-delete" onclick="deleteExpense(${e.id})">Delete</button>
+                    <div class="expense-amount-col">
+                        <div class="expense-amount">
+                            ${e.currency} ${formatNumber(parseFloat(e.amount))}
+                            ${e.currency !== 'EUR' && e.amount_eur ? `<div style="font-size: 12px; color: #666;">&euro;${formatNumber(e.amount_eur)}</div>` : ''}
+                        </div>
+                        <div class="expense-actions">
+                            <button class="btn-edit" onclick="editExpense(${e.id})">Edit</button>
+                            ${e.has_attachments ? `
+                                <button class="btn-pdf" onclick="downloadPdf(${e.id})">PDF</button>
+                            ` : ''}
+                            <button class="btn-delete" onclick="deleteExpense(${e.id})">Delete</button>
+                        </div>
                     </div>
                 </div>
             `).join('');
@@ -509,6 +524,10 @@
 
         function downloadPdf(id) {
             window.open(`/api/expenses/${id}/pdf`, '_blank');
+        }
+
+        function exportToExcel() {
+            window.location.href = '/api/export';
         }
 
         // Category field visibility

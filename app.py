@@ -6,6 +6,7 @@ from models import db, Expense
 # from email_parser import fetch_new_emails  # Phase 3
 from ai_parser import parse_text_with_claude, parse_pdf_with_claude
 from currency import convert_to_eur
+from export import generate_excel_report, get_export_filename
 from datetime import datetime, date
 from decimal import Decimal
 from io import BytesIO
@@ -342,6 +343,22 @@ def get_stats():
             for v in vendor_stats
         ]
     })
+
+
+@app.route('/api/export')
+def export_expenses():
+    """Export all expenses to Excel file."""
+    expenses = Expense.query.order_by(Expense.expense_date.desc()).all()
+
+    excel_file = generate_excel_report(expenses)
+    filename = get_export_filename()
+
+    return send_file(
+        excel_file,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
 
 # Phase 3: Manual email check endpoint (commented out for now)
