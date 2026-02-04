@@ -10,7 +10,7 @@ from export import generate_excel_report, get_export_filename
 from datetime import datetime, date
 from decimal import Decimal
 from io import BytesIO
-from sqlalchemy import func
+from sqlalchemy import func, extract
 import base64
 
 app = Flask(__name__)
@@ -343,6 +343,102 @@ def get_stats():
             for v in vendor_stats
         ]
     })
+
+
+@app.route('/api/monthly-summary')
+def get_monthly_summary():
+    """Get monthly expense totals grouped by category, plus income and net."""
+    # Query costs grouped by year, month, and category
+    cost_results = db.session.query(
+        extract('year', Expense.expense_date).label('year'),
+        extract('month', Expense.expense_date).label('month'),
+        Expense.cost_category,
+        func.sum(Expense.amount_eur).label('total')
+    ).filter(
+        Expense.type == 'cost',
+        Expense.expense_date != None
+    ).group_by(
+        extract('year', Expense.expense_date),
+        extract('month', Expense.expense_date),
+        Expense.cost_category
+    ).all()
+
+    # Query income grouped by year, month
+    income_results = db.session.query(
+        extract('year', Expense.expense_date).label('year'),
+        extract('month', Expense.expense_date).label('month'),
+        func.sum(Expense.amount_eur).label('total')
+    ).filter(
+        Expense.type == 'income',
+        Expense.expense_date != None
+    ).group_by(
+        extract('year', Expense.expense_date),
+        extract('month', Expense.expense_date)
+    ).all()
+
+    # Organize results by month
+    months_dict = {}
+
+    # Process costs
+    for row in cost_results:
+        year, month = int(row.year), int(row.month)
+        key = (year, month)
+        if key not in months_dict:
+            months_dict[key] = {
+                'year': year,
+                'month': month,
+                'income': 0,
+                'categories': {
+                    'operations': 0,
+                    'freelancers': 0,
+                    'equipment': 0,
+                    'other': 0,
+                    'uncategorized': 0
+                }
+            }
+        category = row.cost_category if row.cost_category else 'uncategorized'
+        if category in months_dict[key]['categories']:
+            months_dict[key]['categories'][category] = float(row.total) if row.total else 0
+        else:
+            months_dict[key]['categories']['uncategorized'] += float(row.total) if row.total else 0
+
+    # Process income
+    for row in income_results:
+        year, month = int(row.year), int(row.month)
+        key = (year, month)
+        if key not in months_dict:
+            months_dict[key] = {
+                'year': year,
+                'month': month,
+                'income': 0,
+                'categories': {
+                    'operations': 0,
+                    'freelancers': 0,
+                    'equipment': 0,
+                    'other': 0,
+                    'uncategorized': 0
+                }
+            }
+        months_dict[key]['income'] = float(row.total) if row.total else 0
+
+    # Convert to list and add labels/totals/net
+    month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December']
+    months = []
+    for key in sorted(months_dict.keys(), reverse=True):
+        data = months_dict[key]
+        data['label'] = f"{month_names[data['month']]} {data['year']}"
+        data['total_costs'] = sum(data['categories'].values())
+        data['net'] = data['income'] - data['total_costs']
+        months.append(data)
+
+    return jsonify({'months': months})
+
+
+@app.route('/monthly')
+def monthly_view():
+    """Render the monthly summary page."""
+    return render_template('monthly.html')
 
 
 @app.route('/api/export')
