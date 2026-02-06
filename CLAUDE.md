@@ -56,6 +56,24 @@ python
 python app.py
 ```
 
+### macOS LaunchAgent (Persistent Local Server)
+
+A LaunchAgent runs the app in debug mode at `http://localhost:5055`. It starts on login, restarts on crash, and Flask's debug reloader picks up code changes automatically.
+
+- **Plist**: `~/Library/LaunchAgents/com.wrede.expense-tracker.plist`
+- **Logs**: `~/Library/Logs/expense-tracker.log`
+
+```bash
+# Stop the service
+launchctl bootout gui/$(id -u)/com.wrede.expense-tracker
+
+# Start the service
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.wrede.expense-tracker.plist
+
+# View logs
+tail -f ~/Library/Logs/expense-tracker.log
+```
+
 ### Railway Deployment
 
 ```bash
