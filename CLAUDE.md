@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Flask-based expense tracker that automatically parses forwarded emails using Claude AI to extract expense information. Expenses are stored in PostgreSQL with PDF attachments. Built for personal use with a draft-review workflow.
 
+**IMPORTANT: The local PostgreSQL database contains live production data. NEVER reset, drop, or recreate the database. Only use `db.create_all()` for adding new tables/columns, not for initialization from scratch.**
+
 ## Architecture
 
 ### Core Components

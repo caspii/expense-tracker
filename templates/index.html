@@ -347,7 +347,7 @@
             <button class="btn-secondary" onclick="openPasteEmailModal()">Paste Email</button>
             <button class="btn-success" onclick="openUploadPdfModal()">Upload PDF</button>
             <button class="btn-export" onclick="exportToExcel()">Export Excel</button>
-            <a href="/monthly" class="btn-link">Monthly Summary</a>
+            <a href="/summary" class="btn-link">Summary</a>
         </div>
 
         <div class="stats" id="stats"></div>
@@ -487,17 +487,17 @@
 
             document.getElementById('stats').innerHTML = `
                 <div class="stat-card income">
-                    <h3>Total Income (EUR)</h3>
+                    <h3>${stats.year} Income (EUR)</h3>
                     <div class="value">&euro;${formatNumber(stats.total_income)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">${stats.income_count} transactions</div>
                 </div>
                 <div class="stat-card cost">
-                    <h3>Total Costs (EUR)</h3>
+                    <h3>${stats.year} Costs (EUR)</h3>
                     <div class="value">&euro;${formatNumber(stats.total_costs)}</div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">${stats.cost_count} transactions</div>
                 </div>
                 <div class="stat-card net">
-                    <h3>Net (EUR)</h3>
+                    <h3>${stats.year} Net (EUR)</h3>
                     <div class="value">&euro;${formatNumber(stats.net)}</div>
                 </div>
             `;

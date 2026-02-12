@@ -10,7 +10,7 @@ from export import generate_excel_report, get_export_filename
 from datetime import datetime, date
 from decimal import Decimal
 from io import BytesIO
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, or_
 import base64
 
 app = Flask(__name__)
@@ -108,8 +108,17 @@ def expenses_list():
     if request.method == 'GET':
         expense_type = request.args.get('type')
         cost_category = request.args.get('cost_category')
+        year = request.args.get('year', str(datetime.now().year))
 
         query = Expense.query
+
+        # Filter by year (defaults to current year, use 'all' to show all years)
+        # Include expenses with NULL expense_date in current year view
+        if year != 'all':
+            query = query.filter(or_(
+                extract('year', Expense.expense_date) == int(year),
+                Expense.expense_date == None
+            ))
 
         if expense_type:
             query = query.filter_by(type=expense_type)
@@ -124,8 +133,8 @@ def expenses_list():
     elif request.method == 'POST':
         data = request.json
 
-        # Parse expense_date if provided
-        expense_date = None
+        # Parse expense_date if provided, default to today
+        expense_date = date.today()
         if data.get('expense_date'):
             try:
                 expense_date = date.fromisoformat(data['expense_date'])
@@ -304,19 +313,35 @@ def parse_pdf():
 
 @app.route('/api/stats')
 def get_stats():
-    """Get expense statistics in EUR."""
+    """Get expense statistics in EUR for the current year."""
+    current_year = datetime.now().year
+
+    # Filter for current year based on expense_date (include NULL dates)
+    year_filter = or_(
+        extract('year', Expense.expense_date) == current_year,
+        Expense.expense_date == None
+    )
+
     # Total income and costs (using EUR amounts for consistency)
     income = db.session.query(func.sum(Expense.amount_eur)).filter(
-        Expense.type == 'income'
+        Expense.type == 'income',
+        year_filter
     ).scalar() or 0
 
     costs = db.session.query(func.sum(Expense.amount_eur)).filter(
-        Expense.type == 'cost'
+        Expense.type == 'cost',
+        year_filter
     ).scalar() or 0
 
     # Count by type
-    income_count = Expense.query.filter_by(type='income').count()
-    cost_count = Expense.query.filter_by(type='cost').count()
+    income_count = Expense.query.filter(
+        Expense.type == 'income',
+        year_filter
+    ).count()
+    cost_count = Expense.query.filter(
+        Expense.type == 'cost',
+        year_filter
+    ).count()
 
     # By vendor (using EUR amounts)
     vendor_stats = db.session.query(
@@ -325,7 +350,8 @@ def get_stats():
         func.count(Expense.id).label('count')
     ).filter(
         Expense.type == 'cost',
-        Expense.vendor_name != None
+        Expense.vendor_name != None,
+        year_filter
     ).group_by(
         Expense.vendor_name
     ).order_by(
@@ -333,6 +359,7 @@ def get_stats():
     ).limit(10).all()
 
     return jsonify({
+        'year': current_year,
         'total_income': float(income),
         'total_costs': float(costs),
         'net': float(income - costs),
@@ -436,9 +463,96 @@ def get_monthly_summary():
 
 
 @app.route('/monthly')
-def monthly_view():
-    """Render the monthly summary page."""
-    return render_template('monthly.html')
+def monthly_view_redirect():
+    """Redirect old monthly URL to summary."""
+    from flask import redirect
+    return redirect('/summary')
+
+
+@app.route('/summary')
+def summary_view():
+    """Render the summary page."""
+    return render_template('summary.html')
+
+
+@app.route('/api/yearly-summary')
+def get_yearly_summary():
+    """Get yearly expense totals grouped by category, plus income and net."""
+    # Query costs grouped by year and category
+    cost_results = db.session.query(
+        extract('year', Expense.expense_date).label('year'),
+        Expense.cost_category,
+        func.sum(Expense.amount_eur).label('total')
+    ).filter(
+        Expense.type == 'cost',
+        Expense.expense_date != None
+    ).group_by(
+        extract('year', Expense.expense_date),
+        Expense.cost_category
+    ).all()
+
+    # Query income grouped by year
+    income_results = db.session.query(
+        extract('year', Expense.expense_date).label('year'),
+        func.sum(Expense.amount_eur).label('total')
+    ).filter(
+        Expense.type == 'income',
+        Expense.expense_date != None
+    ).group_by(
+        extract('year', Expense.expense_date)
+    ).all()
+
+    # Organize results by year
+    years_dict = {}
+
+    # Process costs
+    for row in cost_results:
+        year = int(row.year)
+        if year not in years_dict:
+            years_dict[year] = {
+                'year': year,
+                'income': 0,
+                'categories': {
+                    'operations': 0,
+                    'freelancers': 0,
+                    'equipment': 0,
+                    'other': 0,
+                    'uncategorized': 0
+                }
+            }
+        category = row.cost_category if row.cost_category else 'uncategorized'
+        if category in years_dict[year]['categories']:
+            years_dict[year]['categories'][category] = float(row.total) if row.total else 0
+        else:
+            years_dict[year]['categories']['uncategorized'] += float(row.total) if row.total else 0
+
+    # Process income
+    for row in income_results:
+        year = int(row.year)
+        if year not in years_dict:
+            years_dict[year] = {
+                'year': year,
+                'income': 0,
+                'categories': {
+                    'operations': 0,
+                    'freelancers': 0,
+                    'equipment': 0,
+                    'other': 0,
+                    'uncategorized': 0
+                }
+            }
+        years_dict[year]['income'] = float(row.total) if row.total else 0
+
+    # Convert to list and add labels/totals/net
+    years = []
+    for year in sorted(years_dict.keys(), reverse=True):
+        data = years_dict[year]
+        data['label'] = str(year)
+        data['total_costs'] = sum(data['categories'].values())
+        data['net'] = data['income'] - data['total_costs']
+        years.append(data)
+
+    return jsonify({'years': years})
 
 
 @app.route('/api/export')

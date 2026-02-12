@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monthly Summary - Expense Tracker</title>
+    <title>Summary - Expense Tracker</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -25,12 +25,45 @@
             text-decoration: underline;
         }
 
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .toggle-group {
+            background: white;
+            padding: 4px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: inline-flex;
+        }
+        .toggle-btn {
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .toggle-btn:hover {
+            color: #333;
+        }
+        .toggle-btn.active {
+            background: #3b82f6;
+            color: white;
+        }
+
         .filters {
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            flex: 1;
         }
         .filters h3 {
             font-size: 14px;
@@ -58,14 +91,14 @@
             font-size: 14px;
         }
 
-        .month-card {
+        .period-card {
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 16px;
             overflow: hidden;
         }
-        .month-header {
+        .period-header {
             padding: 16px 20px;
             background: #f9fafb;
             border-bottom: 1px solid #e5e7eb;
@@ -74,44 +107,44 @@
             align-items: center;
             gap: 20px;
         }
-        .month-header h2 {
+        .period-header h2 {
             font-size: 18px;
             color: #333;
         }
-        .month-totals {
+        .period-totals {
             display: flex;
             gap: 24px;
             align-items: center;
         }
-        .month-total-item {
+        .period-total-item {
             text-align: right;
         }
-        .month-total-label {
+        .period-total-label {
             font-size: 11px;
             color: #666;
             text-transform: uppercase;
         }
-        .month-total-value {
+        .period-total-value {
             font-size: 18px;
             font-weight: bold;
         }
-        .month-total-value.income { color: #10b981; }
-        .month-total-value.costs { color: #ef4444; }
-        .month-total-value.net-positive { color: #10b981; }
-        .month-total-value.net-negative { color: #ef4444; }
-        .month-categories {
+        .period-total-value.income { color: #10b981; }
+        .period-total-value.costs { color: #ef4444; }
+        .period-total-value.net-positive { color: #10b981; }
+        .period-total-value.net-negative { color: #ef4444; }
+        .period-categories {
             padding: 16px 20px;
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 12px;
         }
         @media (max-width: 900px) {
-            .month-categories {
+            .period-categories {
                 grid-template-columns: repeat(3, 1fr);
             }
         }
         @media (max-width: 600px) {
-            .month-categories {
+            .period-categories {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
@@ -165,39 +198,48 @@
             <a href="/">&larr; Back to Expenses</a>
         </div>
 
-        <h1>Monthly Summary</h1>
+        <h1>Summary</h1>
 
-        <div class="filters">
-            <h3>Filter by Category</h3>
-            <div class="filter-options">
-                <div class="filter-option">
-                    <input type="checkbox" id="filter-operations" checked onchange="renderMonths()">
-                    <label for="filter-operations">Operations</label>
-                </div>
-                <div class="filter-option">
-                    <input type="checkbox" id="filter-freelancers" checked onchange="renderMonths()">
-                    <label for="filter-freelancers">Freelancers</label>
-                </div>
-                <div class="filter-option">
-                    <input type="checkbox" id="filter-equipment" checked onchange="renderMonths()">
-                    <label for="filter-equipment">Equipment</label>
-                </div>
-                <div class="filter-option">
-                    <input type="checkbox" id="filter-other" checked onchange="renderMonths()">
-                    <label for="filter-other">Other</label>
-                </div>
-                <div class="filter-option">
-                    <input type="checkbox" id="filter-uncategorized" checked onchange="renderMonths()">
-                    <label for="filter-uncategorized">Uncategorized</label>
+        <div class="controls">
+            <div class="toggle-group">
+                <button class="toggle-btn active" id="toggleMonthly" onclick="setView('monthly')">Monthly</button>
+                <button class="toggle-btn" id="toggleYearly" onclick="setView('yearly')">Yearly</button>
+            </div>
+
+            <div class="filters">
+                <h3>Filter by Category</h3>
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="filter-operations" checked onchange="renderData()">
+                        <label for="filter-operations">Operations</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="filter-freelancers" checked onchange="renderData()">
+                        <label for="filter-freelancers">Freelancers</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="filter-equipment" checked onchange="renderData()">
+                        <label for="filter-equipment">Equipment</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="filter-other" checked onchange="renderData()">
+                        <label for="filter-other">Other</label>
+                    </div>
+                    <div class="filter-option">
+                        <input type="checkbox" id="filter-uncategorized" checked onchange="renderData()">
+                        <label for="filter-uncategorized">Uncategorized</label>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div id="monthsContainer"></div>
+        <div id="dataContainer"></div>
     </div>
 
     <script>
         let monthsData = [];
+        let yearsData = [];
+        let currentView = 'monthly';
 
         function formatNumber(num) {
             return num.toLocaleString('en-US', {
@@ -227,25 +269,34 @@
             return labels[key] || key;
         }
 
-        function renderMonths() {
-            const container = document.getElementById('monthsContainer');
+        function setView(view) {
+            currentView = view;
+            document.getElementById('toggleMonthly').classList.toggle('active', view === 'monthly');
+            document.getElementById('toggleYearly').classList.toggle('active', view === 'yearly');
+            renderData();
+        }
+
+        function renderData() {
+            const data = currentView === 'monthly' ? monthsData : yearsData;
+            const container = document.getElementById('dataContainer');
             const filters = getActiveFilters();
             const categoryOrder = ['operations', 'freelancers', 'equipment', 'other', 'uncategorized'];
 
-            if (monthsData.length === 0) {
-                container.innerHTML = '<div class="empty-state">No monthly data available</div>';
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state">No data available</div>';
                 return;
             }
 
-            container.innerHTML = monthsData.map(month => {
+            container.innerHTML = data.map(period => {
                 const filteredTotal = categoryOrder
                     .filter(key => filters[key])
-                    .reduce((sum, key) => sum + (month.categories[key] || 0), 0);
+                    .reduce((sum, key) => sum + (period.categories[key] || 0), 0);
 
-                const netClass = month.net >= 0 ? 'net-positive' : 'net-negative';
+                const netValue = period.income - filteredTotal;
+                const netClass = netValue >= 0 ? 'net-positive' : 'net-negative';
 
                 const categoriesHtml = categoryOrder.map(key => {
-                    const val = month.categories[key] || 0;
+                    const val = period.categories[key] || 0;
                     const hiddenClass = filters[key] ? '' : 'hidden';
                     return `
                         <div class="category-item ${hiddenClass}">
@@ -259,25 +310,25 @@
                 }).join('');
 
                 return `
-                    <div class="month-card">
-                        <div class="month-header">
-                            <h2>${month.label}</h2>
-                            <div class="month-totals">
-                                <div class="month-total-item">
-                                    <div class="month-total-label">Income</div>
-                                    <div class="month-total-value income">&euro;${formatNumber(month.income)}</div>
+                    <div class="period-card">
+                        <div class="period-header">
+                            <h2>${period.label}</h2>
+                            <div class="period-totals">
+                                <div class="period-total-item">
+                                    <div class="period-total-label">Income</div>
+                                    <div class="period-total-value income">&euro;${formatNumber(period.income)}</div>
                                 </div>
-                                <div class="month-total-item">
-                                    <div class="month-total-label">Costs</div>
-                                    <div class="month-total-value costs">&euro;${formatNumber(filteredTotal)}</div>
+                                <div class="period-total-item">
+                                    <div class="period-total-label">Costs</div>
+                                    <div class="period-total-value costs">&euro;${formatNumber(filteredTotal)}</div>
                                 </div>
-                                <div class="month-total-item">
-                                    <div class="month-total-label">Net</div>
-                                    <div class="month-total-value ${netClass}">&euro;${formatNumber(month.income - filteredTotal)}</div>
+                                <div class="period-total-item">
+                                    <div class="period-total-label">Net</div>
+                                    <div class="period-total-value ${netClass}">&euro;${formatNumber(netValue)}</div>
                                 </div>
                             </div>
                         </div>
-                        <div class="month-categories">
+                        <div class="period-categories">
                             ${categoriesHtml}
                         </div>
                     </div>
@@ -287,13 +338,18 @@
 
         async function loadData() {
             try {
-                const response = await fetch('/api/monthly-summary');
-                const data = await response.json();
-                monthsData = data.months;
-                renderMonths();
+                const [monthlyRes, yearlyRes] = await Promise.all([
+                    fetch('/api/monthly-summary'),
+                    fetch('/api/yearly-summary')
+                ]);
+                const monthlyData = await monthlyRes.json();
+                const yearlyData = await yearlyRes.json();
+                monthsData = monthlyData.months;
+                yearsData = yearlyData.years;
+                renderData();
             } catch (error) {
-                console.error('Failed to load monthly data:', error);
-                document.getElementById('monthsContainer').innerHTML =
+                console.error('Failed to load data:', error);
+                document.getElementById('dataContainer').innerHTML =
                     '<div class="empty-state">Failed to load data</div>';
             }
         }
