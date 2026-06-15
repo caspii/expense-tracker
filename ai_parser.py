@@ -52,8 +52,10 @@ def parse_text_with_claude(text: str) -> dict:
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=1024,
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
             messages=[
                 {"role": "user", "content": prompt}
             ]
