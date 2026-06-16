@@ -411,8 +411,8 @@
                     <div class="form-group">
                         <label>Expense Date</label>
                         <div style="display: flex; gap: 6px; align-items: center;">
-                            <input type="text" id="expenseDate" placeholder="DD-MM-YYYY" pattern="\d{2}-\d{2}-\d{4}" style="flex: 1;">
-                            <button type="button" class="btn-edit" style="padding: 8px 10px; white-space: nowrap; font-size: 12px;" onclick="document.getElementById('expenseDate').value = toEuDate(new Date().toISOString().slice(0,10))">Today</button>
+                            <input type="date" id="expenseDate" style="flex: 1;">
+                            <button type="button" class="btn-edit" style="padding: 8px 10px; white-space: nowrap; font-size: 12px;" onclick="document.getElementById('expenseDate').value = todayIso()">Today</button>
                         </div>
                     </div>
                     <div class="form-group">
@@ -475,15 +475,13 @@
     </div>
 
     <script>
-        // Date format helpers (API uses YYYY-MM-DD, UI uses DD-MM-YYYY)
-        function toEuDate(isoDate) {
-            if (!isoDate) return '';
-            const [y, m, d] = isoDate.split('-');
-            return `${d}-${m}-${y}`;
-        }
-        function toIsoDate(euDate) {
-            if (!euDate) return null;
-            const [d, m, y] = euDate.split('-');
+        // Today's date as YYYY-MM-DD in the user's local timezone (not UTC).
+        // The native date input displays this in the browser's locale format.
+        function todayIso() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
             return `${y}-${m}-${d}`;
         }
 
@@ -633,7 +631,7 @@
             document.getElementById('expenseCategory').value = expense.cost_category || '';
             document.getElementById('expenseVendor').value = expense.vendor_name || '';
             document.getElementById('expenseExplanation').value = expense.explanation || '';
-            document.getElementById('expenseDate').value = toEuDate(expense.expense_date) || '';
+            document.getElementById('expenseDate').value = expense.expense_date || '';
             document.getElementById('expenseInvoice').value = expense.invoice_number || '';
             document.getElementById('expenseTags').value = expense.tags ? expense.tags.join(', ') : '';
             document.getElementById('expenseAttachmentData').value = '';
@@ -660,7 +658,7 @@
                 cost_category: document.getElementById('expenseCategory').value || null,
                 vendor_name: document.getElementById('expenseVendor').value || null,
                 explanation: document.getElementById('expenseExplanation').value || null,
-                expense_date: toIsoDate(document.getElementById('expenseDate').value) || null,
+                expense_date: document.getElementById('expenseDate').value || null,
                 invoice_number: document.getElementById('expenseInvoice').value || null,
                 tags: document.getElementById('expenseTags').value.split(',').map(t => t.trim()).filter(t => t),
                 source_type: document.getElementById('expenseSourceType').value
@@ -841,7 +839,7 @@
             document.getElementById('expenseCategory').value = data.cost_category || '';
             document.getElementById('expenseVendor').value = data.vendor_name || '';
             document.getElementById('expenseExplanation').value = data.explanation || '';
-            document.getElementById('expenseDate').value = toEuDate(data.expense_date) || '';
+            document.getElementById('expenseDate').value = data.expense_date || '';
             document.getElementById('expenseInvoice').value = data.invoice_number || '';
             document.getElementById('expenseTags').value = data.tags ? data.tags.join(', ') : '';
 
