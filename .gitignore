@@ -56,3 +56,6 @@ add_dummy_data.py
 
 # Logs
 *.log
+
+# Reconciliation reports (regenerate with reconcile.py)
+reconcile-output/

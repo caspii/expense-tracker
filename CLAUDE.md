@@ -111,6 +111,35 @@ curl -X PUT http://localhost:5055/api/expenses/1 \
   -d '{"amount": 99.99, "vendor_name": "Updated Vendor"}'
 ```
 
+### Reconciliation Against a Card Statement
+
+`reconcile.py` compares a Wise transaction-history CSV against the database and reports which card
+transactions are missing. It opens a **read-only Postgres session**, so it cannot write.
+
+```bash
+python reconcile.py transaction-history.csv --year 2025
+# writes reconcile-output/reconcile-2025.md and missing-2025.csv (gitignored)
+```
+
+Matching rule: **only an amount match can pair a transaction with a database row.** Vendor names
+merely widen the date window. This matters — automatic name similarity proposes `Claude → CloudFlare`,
+which would silently reconcile Anthropic charges against the wrong vendor. Confirmed vendor pairs live
+in `VENDOR_ALIASES` at the top of the file (e.g. `twilio → Sendgrid`); everything else is only
+*suggested* in the report for you to approve. Add a year's new aliases there and re-run.
+
+To insert the reviewed results, `import_wise.py` reads that same `missing-YYYY.csv` — edit the file
+first, deleting any line you don't want. It is a dry run unless given `--apply`.
+
+```bash
+python import_wise.py reconcile-output/missing-2025.csv --exclude Scorekeep --apply
+```
+
+Inserted rows carry `source_type='wise_import'` and the Wise transaction id in `external_id`
+(nullable column + partial unique index, added on first run). That makes imports idempotent —
+re-running inserts nothing — and reversible with
+`DELETE FROM expenses WHERE source_type = 'wise_import';`. Back up first: `pg_dump` this database
+before any import, since it holds live data with no other copy.
+
 ## Important Patterns
 
 ### DATABASE_URL Normalization
