@@ -10,21 +10,32 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 
-def generate_excel_report(expenses: list) -> BytesIO:
+def _scope_label(year) -> str:
+    """How the covered period is described inside the workbook."""
+    if year is None or year == 'all':
+        return "All years"
+    return str(year)
+
+
+def generate_excel_report(expenses: list, year=None) -> BytesIO:
     """
-    Generate an Excel report with all expenses and summary.
+    Generate an Excel report with the given expenses and a summary.
 
     Args:
         expenses: List of Expense objects
+        year: Year the list covers, or 'all'. Recorded in the workbook so a
+              downloaded file says what period it contains.
 
     Returns:
         BytesIO object containing the Excel file
     """
+    scope = _scope_label(year)
+
     wb = Workbook()
 
     # Create sheets
     ws_expenses = wb.active
-    ws_expenses.title = "All Expenses"
+    ws_expenses.title = "All Expenses" if scope == "All years" else f"Expenses {scope}"
     ws_summary = wb.create_sheet("Summary")
 
     # Styles
@@ -120,6 +131,7 @@ def generate_excel_report(expenses: list) -> BytesIO:
     # Write summary
     summary_data = [
         ("Expense Summary", ""),
+        ("Period", scope),
         ("", ""),
         ("Total Income (EUR)", total_income),
         ("Total Costs (EUR)", total_costs),
@@ -162,11 +174,14 @@ def generate_excel_report(expenses: list) -> BytesIO:
     return output
 
 
-def get_export_filename() -> str:
+def get_export_filename(year=None) -> str:
     """
-    Generate filename for the export with current date.
+    Generate filename for the export, naming the period it covers.
 
     Returns:
-        Filename string like "expenses_2024-01-15.xlsx"
+        "expenses_2025.xlsx", or "expenses_all-years_2024-01-15.xlsx" when
+        no single year is selected.
     """
-    return f"expenses_{date.today().isoformat()}.xlsx"
+    if year is None or year == 'all':
+        return f"expenses_all-years_{date.today().isoformat()}.xlsx"
+    return f"expenses_{year}.xlsx"

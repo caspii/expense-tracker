@@ -11,6 +11,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from io import BytesIO
 from sqlalchemy import func, extract, or_
+from sqlalchemy.exc import IntegrityError
 import base64
 
 app = Flask(__name__)
@@ -18,6 +19,21 @@ app.config.from_object(Config)
 
 # Initialize database
 db.init_app(app)
+
+
+# Blocks a submission being saved twice. A double-clicked Save fires the two
+# requests milliseconds apart, so checking for an existing row before inserting
+# loses the race - only the database can settle it.
+#
+# Keyed on the amount and date as well as the invoice, so one invoice may still
+# be split across rows with different amounts; only an exact repeat is refused.
+DUPLICATE_INVOICE_INDEX = '''
+    CREATE UNIQUE INDEX IF NOT EXISTS expenses_no_duplicate_invoice
+    ON expenses (vendor_name, invoice_number, amount, expense_date)
+    WHERE invoice_number IS NOT NULL
+      AND invoice_number <> ''
+      AND vendor_name IS NOT NULL
+'''
 
 
 # CLI Commands
@@ -41,14 +57,20 @@ def init_db():
 
 @app.cli.command('migrate-db')
 def migrate_db():
-    """Add missing columns to existing tables."""
+    """Add missing columns and indexes to existing tables."""
     db.session.execute(db.text('''
         ALTER TABLE expenses
         ADD COLUMN IF NOT EXISTS cost_category VARCHAR(20),
         ADD COLUMN IF NOT EXISTS source_type VARCHAR(20),
         ADD COLUMN IF NOT EXISTS expense_date DATE,
         ADD COLUMN IF NOT EXISTS amount_eur NUMERIC(10, 2),
-        ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(10, 6)
+        ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(10, 6),
+        ADD COLUMN IF NOT EXISTS external_id VARCHAR(100)
+    '''))
+    db.session.execute(db.text(DUPLICATE_INVOICE_INDEX))
+    db.session.execute(db.text('''
+        CREATE UNIQUE INDEX IF NOT EXISTS expenses_external_id_key
+        ON expenses (external_id) WHERE external_id IS NOT NULL
     '''))
     db.session.commit()
     click.echo('Database migrated successfully.')
@@ -96,6 +118,25 @@ def backfill_eur():
 # )
 
 
+def requested_year():
+    """The year to display, defaulting to the current one. 'all' disables filtering."""
+    return request.args.get('year', str(datetime.now().year))
+
+
+def year_filter(year):
+    """Restrict to one year, or None for no restriction.
+
+    Expenses with no date are included in every specific year, so they stay
+    visible instead of being reachable only through 'all'.
+    """
+    if year == 'all':
+        return None
+    return or_(
+        extract('year', Expense.expense_date) == int(year),
+        Expense.expense_date == None
+    )
+
+
 @app.route('/')
 def index():
     """Main page showing expenses and stats."""
@@ -108,17 +149,12 @@ def expenses_list():
     if request.method == 'GET':
         expense_type = request.args.get('type')
         cost_category = request.args.get('cost_category')
-        year = request.args.get('year', str(datetime.now().year))
 
         query = Expense.query
 
-        # Filter by year (defaults to current year, use 'all' to show all years)
-        # Include expenses with NULL expense_date in current year view
-        if year != 'all':
-            query = query.filter(or_(
-                extract('year', Expense.expense_date) == int(year),
-                Expense.expense_date == None
-            ))
+        selected = year_filter(requested_year())
+        if selected is not None:
+            query = query.filter(selected)
 
         if expense_type:
             query = query.filter_by(type=expense_type)
@@ -179,7 +215,24 @@ def expenses_list():
         )
 
         db.session.add(expense)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # The duplicate-invoice index rejected this. Report the existing row
+            # rather than a 500, so a double-click reads as "already saved".
+            db.session.rollback()
+            existing = Expense.query.filter_by(
+                vendor_name=expense.vendor_name,
+                invoice_number=expense.invoice_number,
+                amount=expense.amount,
+                expense_date=expense.expense_date,
+            ).first()
+            return jsonify({
+                'error': f'Invoice {expense.invoice_number} from '
+                         f'{expense.vendor_name} is already recorded for this '
+                         f'amount and date.',
+                'existing_id': existing.id if existing else None,
+            }), 409
 
         return jsonify(expense.to_dict()), 201
 
@@ -233,7 +286,17 @@ def expense_detail(expense_id):
             expense.amount_eur = amount_eur
             expense.exchange_rate = exchange_rate
 
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Editing a row onto another one's invoice, amount and date hits the
+            # same index as a duplicate insert. Report it rather than a 500.
+            db.session.rollback()
+            return jsonify({
+                'error': 'Another expense already records this invoice for the '
+                         'same vendor, amount and date.'
+            }), 409
+
         return jsonify(expense.to_dict())
 
     elif request.method == 'DELETE':
@@ -311,36 +374,44 @@ def parse_pdf():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/years')
+def get_years():
+    """Years that actually have expenses, newest first, for the year picker."""
+    rows = db.session.query(
+        extract('year', Expense.expense_date)
+    ).filter(Expense.expense_date != None).distinct().all()
+
+    years = sorted({int(row[0]) for row in rows}, reverse=True)
+    return jsonify({'years': years, 'current': datetime.now().year})
+
+
 @app.route('/api/stats')
 def get_stats():
-    """Get expense statistics in EUR for the current year."""
-    current_year = datetime.now().year
-
-    # Filter for current year based on expense_date (include NULL dates)
-    year_filter = or_(
-        extract('year', Expense.expense_date) == current_year,
-        Expense.expense_date == None
-    )
+    """Get expense statistics in EUR for the selected year."""
+    year = requested_year()
+    selected = year_filter(year)
+    # 'all' has no filter; use a no-op so the queries below read the same either way.
+    conditions = [] if selected is None else [selected]
 
     # Total income and costs (using EUR amounts for consistency)
     income = db.session.query(func.sum(Expense.amount_eur)).filter(
         Expense.type == 'income',
-        year_filter
+        *conditions
     ).scalar() or 0
 
     costs = db.session.query(func.sum(Expense.amount_eur)).filter(
         Expense.type == 'cost',
-        year_filter
+        *conditions
     ).scalar() or 0
 
     # Count by type
     income_count = Expense.query.filter(
         Expense.type == 'income',
-        year_filter
+        *conditions
     ).count()
     cost_count = Expense.query.filter(
         Expense.type == 'cost',
-        year_filter
+        *conditions
     ).count()
 
     # By vendor (using EUR amounts)
@@ -351,7 +422,7 @@ def get_stats():
     ).filter(
         Expense.type == 'cost',
         Expense.vendor_name != None,
-        year_filter
+        *conditions
     ).group_by(
         Expense.vendor_name
     ).order_by(
@@ -359,7 +430,7 @@ def get_stats():
     ).limit(10).all()
 
     return jsonify({
-        'year': current_year,
+        'year': 'All years' if year == 'all' else int(year),
         'total_income': float(income),
         'total_costs': float(costs),
         'net': float(income - costs),
@@ -557,11 +628,17 @@ def get_yearly_summary():
 
 @app.route('/api/export')
 def export_expenses():
-    """Export all expenses to Excel file."""
-    expenses = Expense.query.order_by(Expense.expense_date.desc()).all()
+    """Export the selected year's expenses to an Excel file."""
+    year = requested_year()
 
-    excel_file = generate_excel_report(expenses)
-    filename = get_export_filename()
+    query = Expense.query
+    selected = year_filter(year)
+    if selected is not None:
+        query = query.filter(selected)
+    expenses = query.order_by(Expense.expense_date.desc()).all()
+
+    excel_file = generate_excel_report(expenses, year)
+    filename = get_export_filename(year)
 
     return send_file(
         excel_file,

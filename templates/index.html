@@ -178,6 +178,20 @@
             background: #f9fafb;
         }
 
+        /* Sits next to Export, which acts on whatever year is chosen here. */
+        .year-select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #374151;
+            background: white;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+        }
+        .year-select:hover {
+            background: #f9fafb;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -346,6 +360,7 @@
             <button class="btn-primary" onclick="openAddManualModal()">+ Add Manual</button>
             <button class="btn-secondary" onclick="openPasteEmailModal()">Paste Email</button>
             <button class="btn-success" onclick="openUploadPdfModal()">Upload PDF</button>
+            <select id="yearFilter" class="year-select" onchange="onYearChange()" title="Year to view and export"></select>
             <button class="btn-export" onclick="exportToExcel()">Export Excel</button>
             <a href="/summary" class="btn-link">Summary</a>
         </div>
@@ -493,9 +508,31 @@
             });
         }
 
+        // The year picker drives the stats, the list and the export alike.
+        function selectedYear() {
+            const select = document.getElementById('yearFilter');
+            return select && select.value ? select.value : String(new Date().getFullYear());
+        }
+
+        async function loadYears() {
+            const select = document.getElementById('yearFilter');
+            const { years, current } = await (await fetch('/api/years')).json();
+
+            // Always offer the current year, even before it has any expenses.
+            const options = years.includes(current) ? years : [current, ...years];
+            select.innerHTML = options.map(y => `<option value="${y}">${y}</option>`).join('')
+                + '<option value="all">All years</option>';
+            select.value = String(current);
+        }
+
+        function onYearChange() {
+            loadStats();
+            loadExpenses();
+        }
+
         // Load stats
         async function loadStats() {
-            const response = await fetch('/api/stats');
+            const response = await fetch(`/api/stats?year=${selectedYear()}`);
             const stats = await response.json();
 
             document.getElementById('stats').innerHTML = `
@@ -518,13 +555,15 @@
 
         // Load expenses
         async function loadExpenses() {
-            const response = await fetch('/api/expenses');
+            const year = selectedYear();
+            const response = await fetch(`/api/expenses?year=${year}`);
             const expenses = await response.json();
 
             const list = document.getElementById('expenseList');
 
             if (expenses.length === 0) {
-                list.innerHTML = '<div class="empty-state">No expenses found</div>';
+                const scope = year === 'all' ? '' : ` for ${year}`;
+                list.innerHTML = `<div class="empty-state">No expenses found${scope}</div>`;
                 return;
             }
 
@@ -588,7 +627,7 @@
         }
 
         function exportToExcel() {
-            window.location.href = '/api/export';
+            window.location.href = `/api/export?year=${selectedYear()}`;
         }
 
         // Category field visibility
@@ -647,8 +686,21 @@
         }
 
         // Save expense (create or update)
+        // Every expense is created through this one form, so guarding it here
+        // covers the manual, pasted-email and PDF paths alike.
+        let savingExpense = false;
+
         document.getElementById('expenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            if (savingExpense) return;   // a second click must not save twice
+            savingExpense = true;
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const buttonLabel = submitButton ? submitButton.textContent : null;
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = 'Saving…';
+            }
 
             const id = document.getElementById('expenseId').value;
             const data = {
@@ -673,28 +725,38 @@
             }
 
             try {
-                if (id) {
-                    // Update existing
-                    await fetch(`/api/expenses/${id}`, {
+                const response = id
+                    ? await fetch(`/api/expenses/${id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
-                    });
-                } else {
-                    // Create new
-                    await fetch('/api/expenses', {
+                    })
+                    : await fetch('/api/expenses', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
                     });
+
+                // Previously the modal closed regardless, so a rejected save
+                // looked like it had worked.
+                if (!response.ok) {
+                    const body = await response.json().catch(() => ({}));
+                    throw new Error(body.error || `Save failed (${response.status})`);
                 }
 
                 closeExpenseModal();
                 loadStats();
                 loadExpenses();
             } catch (error) {
-                document.getElementById('expenseError').textContent = 'Failed to save expense';
+                document.getElementById('expenseError').textContent =
+                    error.message || 'Failed to save expense';
                 document.getElementById('expenseError').classList.remove('hidden');
+            } finally {
+                savingExpense = false;
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = buttonLabel;
+                }
             }
         });
 
@@ -917,11 +979,14 @@
             pageDragOverlay.classList.remove('show');
         });
 
-        // Load data on page load
-        loadStats();
-        loadExpenses();
+        // Populate the year picker first, so the initial load uses its value.
+        loadYears().then(() => {
+            loadStats();
+            loadExpenses();
+        });
 
-        // Auto-refresh every 30 seconds
+        // Auto-refresh every 30 seconds. The year list is left alone so a
+        // refresh never pulls the selection back to the current year.
         setInterval(() => {
             loadStats();
             loadExpenses();
