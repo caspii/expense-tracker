@@ -15,6 +15,8 @@ Writes an undo script before touching anything. Dry run unless --apply.
     python fix_2025.py --apply
 """
 
+from pathlib import Path
+
 import click
 import psycopg2
 import psycopg2.extras
@@ -22,7 +24,7 @@ import psycopg2.extras
 from config import Config
 from reconcile import load_csv, load_db_rows, reconcile
 
-UNDO_PATH = '.context/backups/undo-fix-2025.sql'
+UNDO_PATH = 'db-backups/undo-fix-2025.sql'
 
 # Verified duplicates: same date, amount and currency, only one backed by a card
 # charge. The spare double-counts a deduction.
@@ -63,8 +65,9 @@ def capture_undo(conn, ids):
         lines.append(f'INSERT INTO expenses ({columns}) VALUES ({values});')
     lines.append("SELECT setval('expenses_id_seq', (SELECT max(id) FROM expenses));")
     lines.append('COMMIT;')
-    with open(UNDO_PATH, 'w', encoding='utf-8') as handle:
-        handle.write('\n'.join(lines) + '\n')
+    undo = Path(UNDO_PATH)
+    undo.parent.mkdir(parents=True, exist_ok=True)
+    undo.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     return len(records)
 
 
