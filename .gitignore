@@ -59,3 +59,8 @@ add_dummy_data.py
 
 # Reconciliation reports (regenerate with reconcile.py)
 reconcile-output/
+
+# Database dumps and undo scripts. Never commit these: the table holds live
+# financial data, and the dumps are the only copy of it.
+# NOTE: being ignored, `git clean -xdf` would delete them. Keep a copy elsewhere.
+db-backups/
