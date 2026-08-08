@@ -2,6 +2,7 @@
 AI Parser module for extracting expense data from text and PDFs using Claude.
 """
 
+import base64
 import json
 import os
 from dotenv import load_dotenv
@@ -13,7 +14,9 @@ load_dotenv()
 # Initialize Anthropic client
 client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
-PARSE_PROMPT = """Parse this email/document and extract expense information.
+# The field list is shared by both entry points; only the framing differs.
+# Text is pasted inline, a PDF rides along as an attached document block.
+EXPENSE_FIELDS = """Parse this email/document and extract expense information.
 Return a JSON object with these fields:
 - amount (number, required)
 - type ("income" or "cost", required)
@@ -27,28 +30,37 @@ Return a JSON object with these fields:
 - tags (array of relevant tags like ["software", "hosting"])
 - vendor_name (company name)
 - invoice_number (if present)
-- expense_date (YYYY-MM-DD format if mentioned)
+- expense_date (YYYY-MM-DD format if mentioned)"""
+
+PARSE_PROMPT = EXPENSE_FIELDS + """
 
 Content:
 {content}
 
 Return ONLY valid JSON, no other text."""
 
+PDF_PROMPT = EXPENSE_FIELDS + """
 
-def parse_text_with_claude(text: str) -> dict:
+The document is attached.{filename_note}
+
+Return ONLY valid JSON, no other text."""
+
+# A request may not exceed 32MB, and base64 inflates the PDF by roughly a third.
+# Refusing early gives a readable error instead of an opaque one from the API.
+MAX_PDF_BYTES = 20 * 1024 * 1024
+
+
+def _ask_claude(content) -> dict:
     """
-    Parse text content with Claude to extract expense information.
+    Send message content to Claude and parse the expense JSON it returns.
 
     Args:
-        text: The email or document text to parse
+        content: A string, or a list of content blocks (text, document, ...)
 
     Returns:
         dict with parsed expense data or error information
     """
-    # Limit text length to avoid token limits
-    text = text[:5000]
-
-    prompt = PARSE_PROMPT.format(content=text)
+    response_text = None
 
     try:
         message = client.messages.create(
@@ -57,11 +69,13 @@ def parse_text_with_claude(text: str) -> dict:
             thinking={"type": "disabled"},
             output_config={"effort": "low"},
             messages=[
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": content}
             ]
         )
 
-        response_text = message.content[0].text.strip()
+        response_text = next(
+            (block.text for block in message.content if block.type == "text"), ""
+        ).strip()
 
         # Handle potential markdown code blocks in response
         if response_text.startswith('```'):
@@ -86,7 +100,7 @@ def parse_text_with_claude(text: str) -> dict:
     except json.JSONDecodeError as e:
         return {
             'error': f'Failed to parse AI response as JSON: {str(e)}',
-            'raw_response': response_text if 'response_text' in locals() else None
+            'raw_response': response_text
         }
     except Exception as e:
         return {
@@ -94,41 +108,58 @@ def parse_text_with_claude(text: str) -> dict:
         }
 
 
-def parse_pdf_with_claude(pdf_data: bytes, filename: str = None) -> dict:
+def parse_text_with_claude(text: str) -> dict:
     """
-    Extract text from PDF and parse with Claude.
+    Parse text content with Claude to extract expense information.
 
     Args:
-        pdf_data: Binary PDF data
-        filename: Optional filename for context
+        text: The email or document text to parse
 
     Returns:
         dict with parsed expense data or error information
     """
-    try:
-        import io
-        from PyPDF2 import PdfReader
+    # Limit text length to avoid token limits
+    text = text[:5000]
 
-        # Extract text from PDF
-        pdf_reader = PdfReader(io.BytesIO(pdf_data))
-        text = ""
-        for page in pdf_reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+    return _ask_claude(PARSE_PROMPT.format(content=text))
 
-        if not text.strip():
-            return {
-                'error': 'Could not extract text from PDF. The PDF may be image-based or empty.'
-            }
 
-        return parse_text_with_claude(text)
+def parse_pdf_with_claude(pdf_data: bytes, filename: str = None) -> dict:
+    """
+    Parse a PDF with Claude by attaching it as a document block.
 
-    except ImportError:
+    Claude renders every page, so this reads scanned and rasterized invoices
+    that carry no text layer - the ones local text extraction sees as empty.
+
+    Args:
+        pdf_data: Binary PDF data
+        filename: Optional filename, which often carries the vendor or invoice number
+
+    Returns:
+        dict with parsed expense data or error information
+    """
+    if not pdf_data:
+        return {'error': 'The PDF is empty.'}
+
+    if len(pdf_data) > MAX_PDF_BYTES:
         return {
-            'error': 'PyPDF2 is not installed. Run: pip install PyPDF2'
+            'error': f'PDF is too large ({len(pdf_data) // (1024 * 1024)}MB). '
+                     f'The limit is {MAX_PDF_BYTES // (1024 * 1024)}MB.'
         }
-    except Exception as e:
-        return {
-            'error': f'PDF parsing failed: {str(e)}'
-        }
+
+    filename_note = f' Its filename is "{filename}".' if filename else ''
+
+    return _ask_claude([
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": base64.standard_b64encode(pdf_data).decode("utf-8"),
+            },
+        },
+        {
+            "type": "text",
+            "text": PDF_PROMPT.format(filename_note=filename_note),
+        },
+    ])

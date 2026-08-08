@@ -164,6 +164,15 @@ Railway provides `DATABASE_URL` with `postgres://` scheme, but SQLAlchemy requir
 - Downloaded via send_file() with BytesIO in app.py:125-130
 - Original filename preserved in attachment_filename
 
+Uploaded PDFs are sent to Claude whole, as a base64 `document` content block
+(`parse_pdf_with_claude` in ai_parser.py). **Do not replace this with local text
+extraction to save tokens.** That was the original design and it silently rejected
+every invoice with no text layer — a jsPDF or scan-to-PDF invoice is one full-page
+JPEG, so PyPDF2 returned an empty string and the upload failed with "Could not
+extract text from PDF". Claude renders each page, so image-only invoices parse fine.
+Limits are 32MB per request and 100 pages; ai_parser.py refuses anything over 20MB
+of raw PDF up front, since base64 inflates it by roughly a third.
+
 ### Stats Aggregation
 
 - Uses SQLAlchemy func.sum() and func.count() for calculations in app.py:139-182
